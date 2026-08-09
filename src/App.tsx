@@ -62,6 +62,16 @@ function App() {
     });
   }, []);
 
+  // Temporary: lets us force a PWA update from the device itself instead of
+  // needing to clear site data by hand every time a new version deploys.
+  const handleClearCache = useCallback(async () => {
+    const regs = await navigator.serviceWorker?.getRegistrations?.().catch(() => []);
+    await Promise.all((regs ?? []).map((r) => r.unregister()));
+    const keys = await caches?.keys?.().catch(() => []);
+    await Promise.all((keys ?? []).map((k) => caches.delete(k)));
+    window.location.reload();
+  }, []);
+
   const handleSelect = useCallback((selected: File) => {
     setError(null);
     setFile(selected);
@@ -178,7 +188,14 @@ function App() {
       </header>
 
       <main className="app__main">
-        {step === "upload" && <VideoUploader onSelect={handleSelect} error={error} />}
+        {step === "upload" && (
+          <>
+            <VideoUploader onSelect={handleSelect} error={error} />
+            <button type="button" className="cache-reset-btn" onClick={handleClearCache}>
+              🔄 Actualizar (borrar caché)
+            </button>
+          </>
+        )}
 
         {step === "trim" && videoUrl && (
           <div className="editor">
