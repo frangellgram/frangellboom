@@ -124,13 +124,15 @@ export async function createBoomerang(
     await ffmpeg.exec(["-f", "concat", "-safe", "0", "-i", "concat.txt", "-c", "copy", "pingpong.mp4"]);
     advance();
 
-    // Repeat the cycle without re-encoding.
-    await ffmpeg.exec([
-      "-stream_loop", String(Math.max(loops - 1, 0)),
-      "-i", "pingpong.mp4",
-      "-c", "copy",
-      "output.mp4",
-    ]);
+    // Repeat the cycle without re-encoding. Built via the concat demuxer
+    // (rather than -stream_loop) because ffmpeg.wasm doesn't reliably loop
+    // an input stream — it silently plays it back only once.
+    cleanupFiles.push("loops.txt");
+    await ffmpeg.writeFile(
+      "loops.txt",
+      Array.from({ length: Math.max(loops, 1) }, () => "file 'pingpong.mp4'").join("\n") + "\n",
+    );
+    await ffmpeg.exec(["-f", "concat", "-safe", "0", "-i", "loops.txt", "-c", "copy", "output.mp4"]);
     advance();
 
     onProgress?.(1);
