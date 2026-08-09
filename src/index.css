@@ -128,6 +128,15 @@ body {
   overflow: hidden;
   overscroll-behavior: none;
   isolation: isolate;
+  /* iOS 26 Safari's status/toolbar tinting samples an actual
+     background-color — never background-image/gradients — from a
+     fixed/sticky top element, falling back to body's background-color.
+     Nothing here ever set a plain background-color before, so Safari had
+     nothing to read and defaulted to opaque black regardless of what the
+     gradient looked like. This is the color the gradient actually starts
+     at (near the 0%/20% stops), so it blends in rather than being a flat
+     mismatch. */
+  background-color: #3a0e28;
 }
 
 #root {

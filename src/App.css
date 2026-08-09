@@ -13,11 +13,14 @@
   gap: 12px;
   padding: 16px 20px;
   padding-top: calc(16px + env(safe-area-inset-top));
-  /* Paints its own explicit background instead of relying on html's
-     background showing through — matches the pattern that reliably works
-     for the same problem in finance-website's fixed top header. Anchored
-     to the viewport (not this element's own small box) so it's a seamless
-     continuation of the gradient behind the rest of the page. */
+  /* position:sticky (even though nothing here actually scrolls past it) is
+     required for iOS 26 Safari to treat this as a tintable top toolbar and
+     sample its background-color for the status bar. Anchored to the
+     viewport (not this element's own small box) so the gradient it renders
+     is a seamless continuation of the rest of the page. */
+  position: sticky;
+  top: 0;
+  background-color: #3a0e28;
   background-image: var(--brand-gradient);
   background-size: 120vw 120dvh;
   background-position: center;
