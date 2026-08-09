@@ -77,8 +77,8 @@ export async function createBoomerang(
           "-vf", `setpts=(PTS-STARTPTS)/${factor}${scaleFilter}`,
           "-an",
           "-c:v", "libx264",
-          "-preset", "superfast",
-          "-crf", "18",
+          "-preset", "ultrafast",
+          "-crf", "20",
           "-pix_fmt", "yuv420p",
           name,
         ]);
@@ -103,8 +103,8 @@ export async function createBoomerang(
         "-vf", `setpts=PTS/${speed}${scaleFilter}`,
         "-an",
         "-c:v", "libx264",
-        "-preset", "superfast",
-        "-crf", "18",
+        "-preset", "ultrafast",
+        "-crf", "20",
         "-pix_fmt", "yuv420p",
         "segment.mp4",
       ]);
@@ -120,8 +120,8 @@ export async function createBoomerang(
       "-vf", "reverse",
       "-an",
       "-c:v", "libx264",
-      "-preset", "superfast",
-      "-crf", "18",
+      "-preset", "ultrafast",
+      "-crf", "20",
       "-pix_fmt", "yuv420p",
       "reversed.mp4",
     ]);
@@ -150,8 +150,12 @@ export async function createBoomerang(
 
     onProgress?.(1);
 
+    // Pass the read bytes straight into the Blob — wrapping them in
+    // `new Uint8Array(data)` would copy the entire output file a second
+    // time, which is exactly the kind of extra peak memory that was
+    // crashing the tab on iPhone right as the export finished.
     const data = await ffmpeg.readFile("output.mp4");
-    return new Blob([new Uint8Array(data as Uint8Array)], { type: "video/mp4" });
+    return new Blob([data as BlobPart], { type: "video/mp4" });
   } finally {
     ffmpeg.off("progress", handleProgress);
     for (const f of cleanupFiles) {
