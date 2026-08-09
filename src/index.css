@@ -1,0 +1,110 @@
+:root {
+  --bg: #0b0b10;
+  --surface: #16161d;
+  --surface-2: #1e1e27;
+  --border: #2a2a35;
+  --text: #f4f4f6;
+  --text-dim: #9a9aa8;
+
+  /* Sunset family anchored to the app icon's pink→orange gradient: pink,
+     red-orange, orange, gold — one warm progression instead of unrelated
+     hues, so every accented control still reads as the same brand. */
+  --accent: #ff2e63;
+  --accent-2: #ffb03b;
+  --accent-3: #ff5a3c;
+  --accent-4: #ffca3a;
+  --accent-contrast: #ffffff;
+  --success: #2ee6a6;
+  --shadow: rgba(0, 0, 0, 0.45) 0 20px 40px -12px;
+
+  --glass-bg: rgba(30, 30, 39, 0.6);
+  --glass-border: rgba(255, 255, 255, 0.09);
+
+  --sans:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial,
+    sans-serif;
+
+  color-scheme: dark light;
+  font: 16px/1.5 var(--sans);
+  color: var(--text);
+  background: var(--bg);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f2f1f6;
+    --surface: #ffffff;
+    --surface-2: #f6f5fa;
+    --border: #e1e0e8;
+    --text: #16161d;
+    --text-dim: #6b6b78;
+    --shadow: rgba(20, 12, 30, 0.12) 0 20px 40px -12px;
+    --glass-bg: rgba(255, 255, 255, 0.6);
+    --glass-border: rgba(20, 12, 30, 0.08);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  position: relative;
+  margin: 0;
+  min-height: 100svh;
+  background: var(--bg);
+  overflow-x: hidden;
+  isolation: isolate;
+}
+
+/* "Atardecer neón" — bold diagonal brand gradient behind everything, the
+   background chosen from the option gallery (Option A). Fixed identity,
+   not theme-dependent, same as the mesh backdrop it replaces. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: -10%;
+  z-index: -1;
+  background: linear-gradient(
+    155deg,
+    #0a0610 0%,
+    #4a0620 20%,
+    #ff2e63 48%,
+    #ff7a3c 72%,
+    #ffca3a 92%,
+    #3a2400 100%
+  );
+}
+
+#root {
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+}
+
+h1,
+h2,
+p {
+  margin: 0;
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+img,
+video {
+  max-width: 100%;
+  display: block;
+}

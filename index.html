@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover"
+    />
+    <meta name="description" content="Crea boomerangs a partir de tus propios videos, en la calidad que quieras." />
+    <meta name="theme-color" content="#0b0b10" />
+
+    <!-- iOS "Add to Home Screen" support -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="frangellboom" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+
+    <!--
+      Locked-down CSP: this app is fully static and client-side — no backend,
+      no analytics, no third-party scripts. Video processing (ffmpeg.wasm)
+      and all assets are served from this same origin only.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self';
+        script-src 'self' 'wasm-unsafe-eval';
+        worker-src 'self' blob:;
+        style-src 'self' 'unsafe-inline';
+        img-src 'self' data: blob:;
+        media-src 'self' blob:;
+        connect-src 'self' blob:;
+        object-src 'none';
+        base-uri 'none';
+        form-action 'none';
+        frame-ancestors 'none'"
+    />
+
+    <title>frangellboom</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
