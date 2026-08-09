@@ -4,14 +4,30 @@
   display: flex;
   flex-direction: column;
   height: 100%;
-  padding-top: env(safe-area-inset-top);
 }
 
 .app__header {
   display: flex;
   align-items: center;
+  flex-shrink: 0;
   gap: 12px;
   padding: 16px 20px;
+  padding-top: calc(16px + env(safe-area-inset-top));
+  /* Paints its own explicit background instead of relying on html's
+     background showing through — matches the pattern that reliably works
+     for the same problem in finance-website's fixed top header. Anchored
+     to the viewport (not this element's own small box) so it's a seamless
+     continuation of the gradient behind the rest of the page. */
+  background-image: var(--brand-gradient);
+  background-size: 120vw 120dvh;
+  background-position: center;
+  background-attachment: fixed;
+}
+
+@media (display-mode: standalone) {
+  .app__header {
+    background-size: 120vw 120vh;
+  }
 }
 
 .app__logo {
