@@ -27,7 +27,6 @@
   color-scheme: dark light;
   font: 16px/1.5 var(--sans);
   color: var(--text);
-  background: var(--bg);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -58,31 +57,19 @@
    never reveals raw background behind the app. Deliberately NOT
    position:fixed on html/body — that inflates env(safe-area-inset-bottom)
    on iOS. Scrolling for tall content happens inside .app__main instead. */
+/* "Atardecer neón" — bold diagonal brand gradient behind everything, the
+   background chosen from the option gallery (Option A). Fixed identity,
+   not theme-dependent, same as the mesh backdrop it replaces.
+   Lives directly on <html> (not a fixed ::before overlay) so it's the
+   literal root background iOS paints under the status bar and home
+   indicator in standalone PWA mode — a separate fixed layer only worked
+   reliably while body could scroll past the viewport; now that the shell
+   is pinned to exactly 100dvh, the plain background is simpler and can't
+   fail to reach those edges. */
 html {
   height: 100dvh;
   overflow: hidden;
   overscroll-behavior: none;
-  background: var(--bg);
-}
-
-body {
-  position: relative;
-  margin: 0;
-  height: 100%;
-  background: var(--bg);
-  overflow: hidden;
-  overscroll-behavior: none;
-  isolation: isolate;
-}
-
-/* "Atardecer neón" — bold diagonal brand gradient behind everything, the
-   background chosen from the option gallery (Option A). Fixed identity,
-   not theme-dependent, same as the mesh backdrop it replaces. */
-body::before {
-  content: "";
-  position: fixed;
-  inset: -10%;
-  z-index: -1;
   background: linear-gradient(
     155deg,
     #0a0610 0%,
@@ -92,6 +79,15 @@ body::before {
     #ffca3a 92%,
     #3a2400 100%
   );
+}
+
+body {
+  position: relative;
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+  isolation: isolate;
 }
 
 #root {
