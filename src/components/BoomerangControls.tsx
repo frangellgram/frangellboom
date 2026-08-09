@@ -6,6 +6,7 @@ type AccentStyle = CSSProperties & { "--row-accent"?: string };
 interface BoomerangControlsProps {
   loops: number;
   onLoopsChange: (value: number) => void;
+  minLoops: number;
   maxLoops: number;
   speed: Speed;
   onSpeedChange: (value: Speed) => void;
@@ -15,10 +16,6 @@ interface BoomerangControlsProps {
   onResolutionChange: (value: Resolution) => void;
   onRandomize: () => void;
 }
-
-// Matches App.tsx's MAX_LOOPS_CAP — the UI-only sanity ceiling, separate
-// from the 12s-duration-derived cap that usually kicks in first.
-const ABSOLUTE_MAX_LOOPS = 10;
 
 const MODE_OPTIONS: { value: Mode; label: string }[] = [
   { value: "classic", label: "🎯 Clásico" },
@@ -42,6 +39,7 @@ const RESOLUTION_OPTIONS: { value: Resolution; label: string }[] = [
 export function BoomerangControls({
   loops,
   onLoopsChange,
+  minLoops,
   maxLoops,
   speed,
   onSpeedChange,
@@ -66,7 +64,7 @@ export function BoomerangControls({
           <span className="controls__value">×{loops}</span>
         </span>
         <div className="chips" role="group" aria-label="Repeticiones disponibles">
-          {Array.from({ length: maxLoops }, (_, i) => i + 1).map((n) => (
+          {Array.from({ length: maxLoops - minLoops + 1 }, (_, i) => minLoops + i).map((n) => (
             <button
               key={n}
               type="button"
@@ -78,11 +76,11 @@ export function BoomerangControls({
             </button>
           ))}
         </div>
-        {maxLoops < ABSOLUTE_MAX_LOOPS && (
-          <p className="controls__note">
-            Con esta velocidad y modo, {maxLoops === 1 ? "solo entra 1 repetición" : `entran hasta ${maxLoops}`} sin pasar los 12s.
-          </p>
-        )}
+        <p className="controls__note">
+          {minLoops === maxLoops
+            ? `Con esta velocidad y modo, solo entra ×${minLoops}, para quedar entre 8 y 14s.`
+            : `Con esta velocidad y modo, entre ×${minLoops} y ×${maxLoops}, para quedar entre 8 y 14s.`}
+        </p>
       </div>
 
       <div className="controls__row" style={{ "--row-accent": "var(--accent-4)" } as AccentStyle}>

@@ -17,8 +17,21 @@ type Step = "upload" | "trim" | "adjust" | "processing" | "result";
 const DEFAULT_SEGMENT = 2;
 const MIN_SEGMENT = 0.5;
 const MAX_SEGMENT = 2;
-const MAX_TOTAL_SECONDS = 12;
-const MAX_LOOPS_CAP = 10;
+const MIN_TOTAL_SECONDS = 8;
+const MAX_TOTAL_SECONDS = 14;
+const ABSOLUTE_MAX_LOOPS = 40;
+
+// A boomerang should never feel too short (padded up to MIN_TOTAL_SECONDS by
+// adding loops) or run past MAX_TOTAL_SECONDS, whatever speed/mode/segment
+// combination produced it.
+function loopsRangeFor(mode: Mode, speed: Speed, segmentDuration: number): [number, number] {
+  const fwd = forwardDuration(mode, speed, segmentDuration);
+  if (fwd <= 0) return [1, 1];
+  const perLoop = fwd * 2;
+  const min = Math.max(1, Math.ceil(MIN_TOTAL_SECONDS / perLoop));
+  const max = Math.max(min, Math.min(ABSOLUTE_MAX_LOOPS, Math.floor(MAX_TOTAL_SECONDS / perLoop)));
+  return [min, max];
+}
 
 function App() {
   const [step, setStep] = useState<Step>("upload");
@@ -86,17 +99,17 @@ function App() {
   const clampedSegmentDuration = Math.min(segmentDuration, maxSegmentDuration);
 
   // However fast/slow or "ease" the ping-pong plays, the final export must
-  // never exceed MAX_TOTAL_SECONDS — so the loop count's own max is derived
-  // live from the current segment/speed/mode instead of being a fixed number.
-  const maxLoops = useMemo(() => {
-    const fwd = forwardDuration(mode, speed, clampedSegmentDuration);
-    if (fwd <= 0) return 1;
-    return Math.max(1, Math.min(MAX_LOOPS_CAP, Math.floor(MAX_TOTAL_SECONDS / (fwd * 2))));
-  }, [mode, speed, clampedSegmentDuration]);
+  // land between MIN_TOTAL_SECONDS and MAX_TOTAL_SECONDS — so the loop
+  // count's own range is derived live from the current segment/speed/mode
+  // instead of being fixed numbers.
+  const [minLoops, maxLoops] = useMemo(
+    () => loopsRangeFor(mode, speed, clampedSegmentDuration),
+    [mode, speed, clampedSegmentDuration],
+  );
 
   useEffect(() => {
-    setLoops((current) => Math.min(current, maxLoops));
-  }, [maxLoops]);
+    setLoops((current) => Math.min(Math.max(current, minLoops), maxLoops));
+  }, [minLoops, maxLoops]);
 
   const handleCreate = useCallback(async () => {
     if (!file) return;
@@ -152,10 +165,9 @@ function App() {
   const handleRandomize = useCallback(() => {
     const speeds: Speed[] = [0.5, 1, 1.5, 2];
     const randomSpeed = speeds[Math.floor(Math.random() * speeds.length)];
-    const fwd = forwardDuration(mode, randomSpeed, clampedSegmentDuration);
-    const randomMaxLoops = Math.max(1, Math.min(MAX_LOOPS_CAP, Math.floor(MAX_TOTAL_SECONDS / (fwd * 2))));
+    const [randomMin, randomMax] = loopsRangeFor(mode, randomSpeed, clampedSegmentDuration);
     setSpeed(randomSpeed);
-    setLoops(Math.floor(Math.random() * randomMaxLoops) + 1);
+    setLoops(randomMin + Math.floor(Math.random() * (randomMax - randomMin + 1)));
   }, [mode, clampedSegmentDuration]);
 
   const totalDuration = useMemo(
@@ -239,6 +251,7 @@ function App() {
             <BoomerangControls
               loops={loops}
               onLoopsChange={setLoops}
+              minLoops={minLoops}
               maxLoops={maxLoops}
               speed={speed}
               onSpeedChange={setSpeed}
