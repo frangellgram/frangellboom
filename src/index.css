@@ -20,6 +20,20 @@
   --glass-bg: rgba(30, 30, 39, 0.6);
   --glass-border: rgba(255, 255, 255, 0.09);
 
+  /* "Atardecer neón" brand gradient, shared so every layer that needs to
+     paint under the iOS status bar/home indicator (html, body, #root, the
+     header) can use the exact same viewport-anchored background instead of
+     relying on transparency to reveal whichever layer is behind it. */
+  --brand-gradient: linear-gradient(
+    155deg,
+    #0a0610 0%,
+    #4a0620 20%,
+    #ff2e63 48%,
+    #ff7a3c 72%,
+    #ffca3a 92%,
+    #3a2400 100%
+  );
+
   --sans:
     -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial,
     sans-serif;
@@ -66,25 +80,27 @@
    reliably while body could scroll past the viewport; now that the shell
    is pinned to exactly 100dvh, the plain background is simpler and can't
    fail to reach those edges. */
+/* The 0%/100% stops are deliberately near-black bookends for the "sunset"
+   look — background-size 120% + centering pushes those dark tips outside
+   the visible box (same effect the old inset:-10% overlay had), so only
+   the colorful middle of the gradient is ever on-screen.
+   background-attachment:fixed + vw/dvh sizing anchors this to the
+   *viewport*, not each element's own box, so html/body/#root/.app__header
+   below all paint pixel-identical gradient — no seams, and no single layer
+   is load-bearing for covering the iOS safe areas. */
+html,
+body,
+#root {
+  background-image: var(--brand-gradient);
+  background-size: 120vw 120dvh;
+  background-position: center;
+  background-attachment: fixed;
+}
+
 html {
   height: 100dvh;
   overflow: hidden;
   overscroll-behavior: none;
-  /* The 0%/100% stops are deliberately near-black bookends for the "sunset"
-     look — background-size 120% + centering pushes those dark tips outside
-     the visible box (same effect the old inset:-10% overlay had), so only
-     the colorful middle of the gradient is ever on-screen. */
-  background-image: linear-gradient(
-    155deg,
-    #0a0610 0%,
-    #4a0620 20%,
-    #ff2e63 48%,
-    #ff7a3c 72%,
-    #ffca3a 92%,
-    #3a2400 100%
-  );
-  background-size: 120% 120%;
-  background-position: center;
 }
 
 /* Standalone (installed-to-homescreen) launches have no address bar to
@@ -94,6 +110,12 @@ html {
    at the top/bottom of the very first frame. 100vh has nothing to resolve
    there since standalone mode's viewport doesn't change size. */
 @media (display-mode: standalone) {
+  html,
+  body,
+  #root {
+    background-size: 120vw 120vh;
+  }
+
   html {
     height: 100vh;
   }
