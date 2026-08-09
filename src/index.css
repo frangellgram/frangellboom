@@ -81,6 +81,18 @@ html {
   );
 }
 
+/* Standalone (installed-to-homescreen) launches have no address bar to
+   dynamically show/hide, which is the entire reason 100dvh exists — and on
+   a cold start (icon tap → splash → first paint) iOS has a documented bug
+   where dvh hasn't finished resolving yet, leaving unpainted black space
+   at the top/bottom of the very first frame. 100vh has nothing to resolve
+   there since standalone mode's viewport doesn't change size. */
+@media (display-mode: standalone) {
+  html {
+    height: 100vh;
+  }
+}
+
 body {
   position: relative;
   margin: 0;
