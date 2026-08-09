@@ -46,6 +46,10 @@ export function useBoomerangPreview(
     };
     video.addEventListener("seeked", onSeeked);
 
+    // iOS Safari never decodes a frame for a <video> that hasn't played yet,
+    // so seeking it by hand (below) leaves it black. A silent play/pause
+    // "primes" the decoder first.
+    video.play().then(() => video.pause()).catch(() => {});
     video.currentTime = start;
 
     const tick = (ts: number) => {
