@@ -53,6 +53,11 @@ export async function createBoomerang(
   };
 
   const cleanupFiles = [inputName, "segment.mp4", "reversed.mp4", "concat.txt", "pingpong.mp4", "output.mp4"];
+  // Deleted eagerly as soon as each is consumed, instead of only at the end —
+  // mobile browsers have much tighter WASM memory limits than desktop, and
+  // keeping every intermediate file resident in MEMFS at once was pushing
+  // exports over the limit and crashing the tab partway through.
+  const del = (name: string) => ffmpeg.deleteFile(name).catch(() => {});
 
   try {
     const scaleFilter = resolution === "original" ? "" : `,scale=-2:${resolution}`;
@@ -85,6 +90,8 @@ export async function createBoomerang(
       await ffmpeg.writeFile("zones.txt", zoneFiles.map((f) => `file '${f}'`).join("\n") + "\n");
       await ffmpeg.exec(["-f", "concat", "-safe", "0", "-i", "zones.txt", "-c", "copy", "segment.mp4"]);
       advance();
+      await del("zones.txt");
+      for (const f of zoneFiles) await del(f);
     } else {
       // Trim to the chosen segment (+ speed + optional downscale), strip
       // audio, re-encode so cut points land on real frames instead of the
@@ -103,6 +110,7 @@ export async function createBoomerang(
       ]);
       advance();
     }
+    await del(inputName);
 
     // Build the reversed copy of that same (already speed-adjusted) segment.
     // Codec settings must be explicit here too — without them ffmpeg falls
@@ -123,6 +131,9 @@ export async function createBoomerang(
     await ffmpeg.writeFile("concat.txt", "file 'segment.mp4'\nfile 'reversed.mp4'\n");
     await ffmpeg.exec(["-f", "concat", "-safe", "0", "-i", "concat.txt", "-c", "copy", "pingpong.mp4"]);
     advance();
+    await del("segment.mp4");
+    await del("reversed.mp4");
+    await del("concat.txt");
 
     // Repeat the cycle without re-encoding. Built via the concat demuxer
     // (rather than -stream_loop) because ffmpeg.wasm doesn't reliably loop
@@ -134,6 +145,8 @@ export async function createBoomerang(
     );
     await ffmpeg.exec(["-f", "concat", "-safe", "0", "-i", "loops.txt", "-c", "copy", "output.mp4"]);
     advance();
+    await del("pingpong.mp4");
+    await del("loops.txt");
 
     onProgress?.(1);
 

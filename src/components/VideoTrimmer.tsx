@@ -82,7 +82,13 @@ export function VideoTrimmer({
           className="trimmer__video"
           muted
           playsInline
-          onLoadedMetadata={(e) => onDurationChange(e.currentTarget.duration)}
+          onLoadedMetadata={(e) => {
+            onDurationChange(e.currentTarget.duration);
+            // iOS Safari never decodes a frame for a <video> that hasn't
+            // played yet, so seeking alone leaves it black. A silent
+            // play/pause "primes" the decoder before we start scrubbing it.
+            e.currentTarget.play().then(() => e.currentTarget.pause()).catch(() => {});
+          }}
         />
       </div>
 
