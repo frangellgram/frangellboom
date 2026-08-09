@@ -162,14 +162,6 @@ function App() {
     }
   }, [file, start, clampedSegmentDuration]);
 
-  const handleRandomize = useCallback(() => {
-    const speeds: Speed[] = [0.5, 1, 1.5, 2];
-    const randomSpeed = speeds[Math.floor(Math.random() * speeds.length)];
-    const [randomMin, randomMax] = loopsRangeFor(mode, randomSpeed, clampedSegmentDuration);
-    setSpeed(randomSpeed);
-    setLoops(randomMin + Math.floor(Math.random() * (randomMax - randomMin + 1)));
-  }, [mode, clampedSegmentDuration]);
-
   const totalDuration = useMemo(
     () => totalBoomerangDuration(mode, speed, clampedSegmentDuration, loops),
     [mode, speed, clampedSegmentDuration, loops],
@@ -259,7 +251,6 @@ function App() {
               onModeChange={setMode}
               resolution={resolution}
               onResolutionChange={setResolution}
-              onRandomize={handleRandomize}
             />
 
             {error && <p className="app__error">{error}</p>}

@@ -14,7 +14,6 @@ interface BoomerangControlsProps {
   onModeChange: (value: Mode) => void;
   resolution: Resolution;
   onResolutionChange: (value: Resolution) => void;
-  onRandomize: () => void;
 }
 
 const MODE_OPTIONS: { value: Mode; label: string }[] = [
@@ -47,15 +46,11 @@ export function BoomerangControls({
   onModeChange,
   resolution,
   onResolutionChange,
-  onRandomize,
 }: BoomerangControlsProps) {
   return (
     <div className="controls">
       <div className="controls__header">
         <span className="controls__heading">Ajustes</span>
-        <button type="button" className="dice-btn" onClick={onRandomize} title="Sorpréndeme">
-          🎲 Sorpréndeme
-        </button>
       </div>
 
       <div className="controls__row" style={{ "--row-accent": "var(--accent-3)" } as AccentStyle}>

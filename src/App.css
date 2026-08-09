@@ -478,29 +478,6 @@
   color: var(--text-dim);
 }
 
-.dice-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  border-radius: 999px;
-  border: none;
-  background: linear-gradient(135deg, var(--accent-3), var(--accent-4));
-  color: #fff;
-  font-size: 12px;
-  font-weight: 800;
-  cursor: pointer;
-  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-.dice-btn:hover {
-  transform: rotate(-6deg) scale(1.05);
-}
-
-.dice-btn:active {
-  transform: scale(0.94);
-}
-
 .controls__row {
   display: flex;
   flex-direction: column;
