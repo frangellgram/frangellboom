@@ -70,7 +70,11 @@ html {
   height: 100dvh;
   overflow: hidden;
   overscroll-behavior: none;
-  background: linear-gradient(
+  /* The 0%/100% stops are deliberately near-black bookends for the "sunset"
+     look — background-size 120% + centering pushes those dark tips outside
+     the visible box (same effect the old inset:-10% overlay had), so only
+     the colorful middle of the gradient is ever on-screen. */
+  background-image: linear-gradient(
     155deg,
     #0a0610 0%,
     #4a0620 20%,
@@ -79,6 +83,8 @@ html {
     #ffca3a 92%,
     #3a2400 100%
   );
+  background-size: 120% 120%;
+  background-position: center;
 }
 
 /* Standalone (installed-to-homescreen) launches have no address bar to
