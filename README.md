@@ -1,32 +1,37 @@
-# React + TypeScript + Vite
+# frangellboom 🪃
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+Crea boomerangs desde tus propios videos, en la calidad que quieras — sin el límite de 720p de Instagram.
 
-Currently, two official plugins are available:
+## Cómo funciona
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+1. Importá un video (grabado con la cámara de tu dispositivo).
+2. Elegí el tramo que querés convertir en boomerang (hasta 2 segundos).
+3. Ajustá velocidad, modo (clásico o "ease"), repeticiones y calidad de salida — con vista previa en vivo.
+4. Exportá y descargá tu boomerang.
 
-## React Compiler
+Todo el procesamiento de video pasa **dentro de tu navegador** (usando [ffmpeg.wasm](https://ffmpegwasm.netlify.app/)): tu video nunca se sube a ningún servidor. La app no tiene backend.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+Es instalable como PWA en Android y iPhone, y funciona sin conexión una vez instalada.
 
-## Expanding the Oxlint configuration
+## Desarrollo
 
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```sh
+npm install
+npm run dev
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+## Build
+
+```sh
+npm run build
+```
+
+Genera un sitio 100% estático en `dist/` — se puede servir desde cualquier hosting estático (ver `deploy/nginx.conf.example` para una configuración de referencia con headers de seguridad).
+
+## Stack
+
+React · TypeScript · Vite · ffmpeg.wasm
+
+## Licencia
+
+[MIT](./LICENSE)
