@@ -178,7 +178,7 @@ function App() {
   return (
     <div className="app">
       <header className="app__header">
-        <img src="/favicon.svg" alt="" className="app__logo" width="36" height="36" />
+        <img src={`${import.meta.env.BASE_URL}favicon.svg`} alt="" className="app__logo" width="36" height="36" />
         <div>
           <h1 className="app__title">frangellboom</h1>
           <p className="app__tagline">boomerangs en alta calidad, a tu manera</p>
