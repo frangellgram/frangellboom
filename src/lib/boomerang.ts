@@ -60,7 +60,16 @@ export async function createBoomerang(
   const del = (name: string) => ffmpeg.deleteFile(name).catch(() => {});
 
   try {
-    const scaleFilter = resolution === "original" ? "" : `,scale=-2:${resolution}`;
+    // Even "original" gets a safety cap: the reverse filter below has to
+    // buffer every decoded frame in memory before it can write them out
+    // backwards, and an uncapped 4K phone video (the default on modern
+    // iPhones) is enough to blow past iOS Safari's WASM memory budget.
+    // force_original_aspect_ratio=decrease never upscales, so this is a
+    // no-op for anything already at or under ~1080p.
+    const scaleFilter =
+      resolution === "original"
+        ? ",scale=1920:1920:force_original_aspect_ratio=decrease:force_divisible_by=2"
+        : `,scale=-2:${resolution}`;
 
     if (mode === "ease") {
       const zoneFiles: string[] = [];
