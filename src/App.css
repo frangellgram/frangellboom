@@ -20,7 +20,7 @@
      is a seamless continuation of the rest of the page. */
   position: sticky;
   top: 0;
-  background-color: #3a0e28;
+  background-color: #991c3b;
   background-image: var(--brand-gradient);
   background-size: 120vw 120dvh;
   background-position: center;
@@ -49,12 +49,18 @@
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
+  /* Without the dark corners the page background used to have, this
+     gradient text can land on a page background of a similar hue and all
+     but disappear — filter:drop-shadow (unlike text-shadow) renders
+     correctly against clipped/transparent text. */
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.55)) drop-shadow(0 0 10px rgba(0, 0, 0, 0.3));
 }
 
 .app__tagline {
   font-size: 12px;
   color: var(--text-dim);
   font-weight: 600;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
 }
 
 .app__main {
@@ -256,6 +262,7 @@
   color: var(--text-dim);
   font-size: 14px;
   max-width: 32ch;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
 }
 
 .uploader__badges {

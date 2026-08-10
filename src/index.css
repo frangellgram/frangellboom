@@ -23,7 +23,10 @@
   /* "Atardecer neón" brand gradient, shared so every layer that needs to
      paint under the iOS status bar/home indicator (html, body, #root, the
      header) can use the exact same viewport-anchored background instead of
-     relying on transparency to reveal whichever layer is behind it. */
+     relying on transparency to reveal whichever layer is behind it.
+     Dark bookend stops restored (the vivid-everywhere version looked worse)
+     — background-size 120% + centering below crops those near-black tips
+     out of the visible area, same as before. */
   --brand-gradient: linear-gradient(
     155deg,
     #0a0610 0%,
@@ -80,11 +83,7 @@
    reliably while body could scroll past the viewport; now that the shell
    is pinned to exactly 100dvh, the plain background is simpler and can't
    fail to reach those edges. */
-/* The 0%/100% stops are deliberately near-black bookends for the "sunset"
-   look — background-size 120% + centering pushes those dark tips outside
-   the visible box (same effect the old inset:-10% overlay had), so only
-   the colorful middle of the gradient is ever on-screen.
-   background-attachment:fixed + vw/dvh sizing anchors this to the
+/* background-attachment:fixed + vw/dvh sizing anchors this to the
    *viewport*, not each element's own box, so html/body/#root/.app__header
    below all paint pixel-identical gradient — no seams, and no single layer
    is load-bearing for covering the iOS safe areas. */
@@ -132,11 +131,10 @@ body {
      background-color — never background-image/gradients — from a
      fixed/sticky top element, falling back to body's background-color.
      Nothing here ever set a plain background-color before, so Safari had
-     nothing to read and defaulted to opaque black regardless of what the
-     gradient looked like. This is the color the gradient actually starts
-     at (near the 0%/20% stops), so it blends in rather than being a flat
-     mismatch. */
-  background-color: #3a0e28;
+     nothing to read and defaulted to opaque black. A darker shade of the
+     brand pink — close enough to the gradient's cropped top edge to blend
+     in, dark enough not to look like a flat mismatch against it. */
+  background-color: #991c3b;
 }
 
 #root {
