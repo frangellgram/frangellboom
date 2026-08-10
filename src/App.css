@@ -196,6 +196,28 @@
 
 /* ---------- uploader ---------- */
 
+/* Fills the space below the header so the uploader card lands mid-screen
+   instead of hugging the top — on a phone, the top edge is the hardest
+   spot to reach one-handed. Unequal flex spacers (instead of
+   justify-content: center) settle it slightly above dead-center, which
+   reads more natural than perfect centering. */
+.upload-screen {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.upload-screen::before {
+  content: "";
+  flex: 0.8;
+}
+
+.upload-screen::after {
+  content: "";
+  flex: 1.2;
+}
+
 .uploader {
   display: flex;
   flex-direction: column;
@@ -289,26 +311,25 @@
   font-weight: 600;
 }
 
-.cache-reset-btn {
-  display: block;
-  margin: 16px auto 0;
-  padding: 8px 14px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: var(--surface-2);
-  color: var(--text-dim);
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.cache-reset-btn:hover,
-.cache-reset-btn:focus-visible {
-  border-color: var(--accent);
-  color: var(--text);
-}
-
 /* ---------- editor ---------- */
+
+/* Nudges the trim step down from the top edge, same reasoning as
+   upload-screen — only a partial push (not full centering), so the
+   "Siguiente" button doesn't end up crowded toward the bottom edge. The
+   spacer shrinks first on short viewports instead of pushing content
+   out of view. */
+.trim-screen {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.trim-screen::before {
+  content: "";
+  flex: 0.15;
+  min-height: 0;
+}
 
 .editor {
   display: flex;
@@ -392,6 +413,16 @@
   font-weight: 600;
 }
 
+/* This row sits directly on the brand gradient (no card behind it), and a
+   text-shadow alone isn't enough once the gradient reaches its brighter
+   orange/gold stops — a translucent dark scrim (same idiom as
+   .preview__live-badge) keeps it legible at every position. */
+.trimmer__labels span {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, #000 40%, transparent);
+}
+
 /* ---------- live preview ---------- */
 
 .preview {
@@ -473,10 +504,18 @@
 }
 
 .total-duration {
+  align-self: center;
   text-align: center;
   font-size: 14px;
   font-weight: 700;
   color: var(--text-dim);
+  /* Sits directly on the brand gradient (no card behind it). A translucent
+     dark scrim (same idiom as .preview__live-badge) keeps both the dim
+     label text and the gradient-clipped numbers below legible everywhere
+     on the gradient, including its brighter orange/gold stops. */
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: color-mix(in srgb, #000 40%, transparent);
 }
 
 .total-duration strong {

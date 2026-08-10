@@ -62,16 +62,6 @@ function App() {
     });
   }, []);
 
-  // Temporary: lets us force a PWA update from the device itself instead of
-  // needing to clear site data by hand every time a new version deploys.
-  const handleClearCache = useCallback(async () => {
-    const regs = await navigator.serviceWorker?.getRegistrations?.().catch(() => []);
-    await Promise.all((regs ?? []).map((r) => r.unregister()));
-    const keys = await caches?.keys?.().catch(() => []);
-    await Promise.all((keys ?? []).map((k) => caches.delete(k)));
-    window.location.reload();
-  }, []);
-
   const handleSelect = useCallback((selected: File) => {
     setError(null);
     setFile(selected);
@@ -189,55 +179,54 @@ function App() {
 
       <main className="app__main">
         {step === "upload" && (
-          <>
+          <div className="upload-screen">
             <VideoUploader onSelect={handleSelect} error={error} />
-            <button type="button" className="cache-reset-btn" onClick={handleClearCache}>
-              🔄 Actualizar (borrar caché)
-            </button>
-          </>
+          </div>
         )}
 
         {step === "trim" && videoUrl && (
-          <div className="editor">
-            <VideoTrimmer
-              videoUrl={videoUrl}
-              duration={duration}
-              start={start}
-              segmentDuration={clampedSegmentDuration}
-              onStartChange={setStart}
-              onDurationChange={setDuration}
-            />
+          <div className="trim-screen">
+            <div className="editor">
+              <VideoTrimmer
+                videoUrl={videoUrl}
+                duration={duration}
+                start={start}
+                segmentDuration={clampedSegmentDuration}
+                onStartChange={setStart}
+                onDurationChange={setDuration}
+              />
 
-            <div className="controls controls--single">
-              <div className="controls__row">
-                <label className="controls__label" htmlFor="segment-duration">
-                  <span>✂️ Duración del tramo</span>
-                  <span className="controls__value">{clampedSegmentDuration.toFixed(1)}s</span>
-                </label>
-                <input
-                  id="segment-duration"
-                  type="range"
-                  min={MIN_SEGMENT}
-                  max={Math.max(maxSegmentDuration, MIN_SEGMENT)}
-                  step={0.1}
-                  value={clampedSegmentDuration}
-                  onChange={(e) => setSegmentDuration(Number(e.target.value))}
-                />
+              <div className="controls controls--single">
+                <div className="controls__row">
+                  <label className="controls__label" htmlFor="segment-duration">
+                    <span>✂️ Duración del tramo</span>
+                    <span className="controls__value">{clampedSegmentDuration.toFixed(1)}s</span>
+                  </label>
+                  <input
+                    id="segment-duration"
+                    type="range"
+                    min={MIN_SEGMENT}
+                    max={Math.max(maxSegmentDuration, MIN_SEGMENT)}
+                    step={0.1}
+                    value={clampedSegmentDuration}
+                    onChange={(e) => setSegmentDuration(Number(e.target.value))}
+                  />
+                </div>
               </div>
-            </div>
 
-            <div className="editor__actions">
-              <button type="button" className="btn btn--ghost" onClick={handleReset}>
-                Cambiar video
-              </button>
-              <button
-                type="button"
-                className="btn btn--primary"
-                onClick={handleGoToAdjust}
-                disabled={duration === 0 || preparingPreview}
-              >
-                {preparingPreview ? "Preparando…" : "Siguiente →"}
-              </button>
+              <div className="editor__actions">
+                <button type="button" className="btn btn--ghost" onClick={handleReset}>
+                  Cambiar video
+                </button>
+                <button
+                  type="button"
+                  className="btn btn--primary"
+                  onClick={handleGoToAdjust}
+                  disabled={duration === 0 || preparingPreview}
+                >
+                  {preparingPreview ? "Preparando…" : "Siguiente →"}
+                </button>
+              </div>
             </div>
           </div>
         )}
