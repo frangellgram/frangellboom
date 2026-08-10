@@ -6,6 +6,13 @@ import { VitePWA } from "vite-plugin-pwa";
 // https://vite.dev/config/
 export default defineConfig({
   base: "/frangellboom/",
+  // Pinned to 5174, not the vite default 5173 — another local project on
+  // this machine owns 5173. strictPort so a collision fails loudly instead
+  // of silently drifting onto some other port.
+  server: {
+    port: 5174,
+    strictPort: true,
+  },
   plugins: [
     react(),
     // Self-host ffmpeg-core so the app has zero third-party runtime
