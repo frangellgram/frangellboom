@@ -142,11 +142,11 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
-  min-height: 48px;
-  padding: 0 20px;
+  min-height: 44px;
+  padding: 0 18px;
   border: none;
   border-radius: 14px;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 700;
   text-decoration: none;
   cursor: pointer;
@@ -331,10 +331,29 @@
   min-height: 0;
 }
 
+/* Nudges the adjust step (preview + ajustes + action buttons) down from
+   the top edge by a small fixed amount. A fixed flex-basis (rather than
+   trim-screen's grow-based spacer) keeps the push modest and predictable
+   — this screen's content already nearly fills the shortest phone
+   viewports, so flex-shrink:1 lets the spacer collapse to 0 there
+   instead of forcing a scroll. */
+.adjust-screen {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.adjust-screen::before {
+  content: "";
+  flex: 0 1 22px;
+  min-height: 0;
+}
+
 .editor {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 10px;
 }
 
 .editor__actions {
@@ -437,7 +456,7 @@
 
 .preview__video {
   width: 100%;
-  max-height: 52svh;
+  max-height: 22svh;
   object-fit: contain;
   background: #000;
 }
@@ -530,11 +549,11 @@
 .controls {
   display: flex;
   flex-direction: column;
-  gap: 18px;
-  padding: 16px;
+  gap: 8px;
+  padding: 10px;
   background: var(--surface-2);
   border: 1px solid var(--border);
-  border-radius: 18px;
+  border-radius: 16px;
 }
 
 .controls__header {
@@ -544,7 +563,7 @@
 }
 
 .controls__heading {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -554,13 +573,13 @@
 .controls__row {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding-left: 12px;
+  gap: 4px;
+  padding-left: 10px;
   border-left: 3px solid var(--row-accent, var(--accent));
 }
 
 .controls__note {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-dim);
   margin: 0;
 }
@@ -569,7 +588,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
 }
 
@@ -615,16 +634,16 @@
 .chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
 }
 
 .chip {
-  padding: 8px 14px;
+  padding: 5px 10px;
   border-radius: 999px;
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text-dim);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
   cursor: pointer;
   transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
