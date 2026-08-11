@@ -2,7 +2,7 @@ import type { FFmpeg } from "@ffmpeg/ffmpeg";
 import { fetchFile } from "@ffmpeg/util";
 import { EASE_ZONES, type Mode } from "./boomerangMath";
 
-export type Resolution = "original" | "1080" | "720" | "480";
+export type Resolution = "1080" | "720" | "480";
 export type Speed = 0.5 | 1 | 1.5 | 2;
 export type { Mode };
 
@@ -60,16 +60,11 @@ export async function createBoomerang(
   const del = (name: string) => ffmpeg.deleteFile(name).catch(() => {});
 
   try {
-    // Even "original" gets a safety cap: the reverse filter below has to
-    // buffer every decoded frame in memory before it can write them out
-    // backwards, and an uncapped 4K phone video (the default on modern
-    // iPhones) is enough to blow past iOS Safari's WASM memory budget.
-    // force_original_aspect_ratio=decrease never upscales, so this is a
-    // no-op for anything already at or under ~1080p.
-    const scaleFilter =
-      resolution === "original"
-        ? ",scale=1920:1920:force_original_aspect_ratio=decrease:force_divisible_by=2"
-        : `,scale=-2:${resolution}`;
+    // The reverse filter below has to buffer every decoded frame in memory
+    // before it can write them out backwards, so downscaling here (before
+    // that pass) also keeps an uncapped 4K phone video from blowing past
+    // iOS Safari's WASM memory budget.
+    const scaleFilter = `,scale=-2:${resolution}`;
 
     if (mode === "ease") {
       const zoneFiles: string[] = [];

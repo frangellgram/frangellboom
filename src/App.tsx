@@ -43,7 +43,7 @@ function App() {
   const [loops, setLoops] = useState(3);
   const [speed, setSpeed] = useState<Speed>(1);
   const [mode, setMode] = useState<Mode>("classic");
-  const [resolution, setResolution] = useState<Resolution>("original");
+  const [resolution, setResolution] = useState<Resolution>("1080");
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
   const [processingLabel, setProcessingLabel] = useState("Preparando…");
@@ -232,48 +232,50 @@ function App() {
         )}
 
         {(step === "adjust" || step === "processing") && videoUrl && (
-          <div className="editor">
-            <BoomerangPreview
-              videoUrl={previewClipUrl ?? videoUrl}
-              start={previewClipUrl ? 0 : start}
-              duration={clampedSegmentDuration}
-              speed={speed}
-              mode={mode}
-            />
+          <div className="adjust-screen">
+            <div className="editor">
+              <BoomerangPreview
+                videoUrl={previewClipUrl ?? videoUrl}
+                start={previewClipUrl ? 0 : start}
+                duration={clampedSegmentDuration}
+                speed={speed}
+                mode={mode}
+              />
 
-            <p className="total-duration">
-              Tramo: <strong>{clampedSegmentDuration.toFixed(1)}s</strong> · Duración total:{" "}
-              <strong>{totalDuration.toFixed(1)}s</strong>
-            </p>
+              <p className="total-duration">
+                Tramo: <strong>{clampedSegmentDuration.toFixed(1)}s</strong> · Duración total:{" "}
+                <strong>{totalDuration.toFixed(1)}s</strong>
+              </p>
 
-            <BoomerangControls
-              loops={loops}
-              onLoopsChange={setLoops}
-              minLoops={minLoops}
-              maxLoops={maxLoops}
-              speed={speed}
-              onSpeedChange={setSpeed}
-              mode={mode}
-              onModeChange={setMode}
-              resolution={resolution}
-              onResolutionChange={setResolution}
-            />
+              <BoomerangControls
+                loops={loops}
+                onLoopsChange={setLoops}
+                minLoops={minLoops}
+                maxLoops={maxLoops}
+                speed={speed}
+                onSpeedChange={setSpeed}
+                mode={mode}
+                onModeChange={setMode}
+                resolution={resolution}
+                onResolutionChange={setResolution}
+              />
 
-            {error && <p className="app__error">{error}</p>}
+              {error && <p className="app__error">{error}</p>}
 
-            <div className="editor__actions">
-              <button type="button" className="btn btn--ghost" onClick={() => setStep("trim")}>
-                ← Recortar
-              </button>
-              <button
-                type="button"
-                className="btn btn--primary"
-                onClick={handleCreate}
-                disabled={step === "processing"}
-              >
-                <BoomerangMark className="btn__mark" />
-                Crear boomerang
-              </button>
+              <div className="editor__actions">
+                <button type="button" className="btn btn--ghost" onClick={() => setStep("trim")}>
+                  ← Recortar
+                </button>
+                <button
+                  type="button"
+                  className="btn btn--primary"
+                  onClick={handleCreate}
+                  disabled={step === "processing"}
+                >
+                  <BoomerangMark className="btn__mark" />
+                  Crear boomerang
+                </button>
+              </div>
             </div>
           </div>
         )}
