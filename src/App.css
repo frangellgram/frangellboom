@@ -675,6 +675,13 @@
      happening: the row never fully closed). Any extra breathing room has
      to live on a descendant instead, so it collapses away with the rest of
      the content. */
+}
+
+/* Only the Velocidad row needs this — the fps note collapse reuses the same
+   wrapper but is a plain rounded card with no glow, so the fade below would
+   just blur its own bottom edge into a half-finished-looking cutoff instead
+   of a clean rounded corner. */
+.controls__collapse-inner--glow {
   /* The active chip's glow trails off past where the padding below gives it
      room, so overflow:hidden's crisp cut still showed as a faint line.
      Fading the last stretch of the box to transparent (instead of a hard
