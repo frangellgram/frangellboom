@@ -69,7 +69,7 @@ export function BoomerangControls({
       </div>
 
       <div className={`controls__collapse${mode === "classic" ? " controls__collapse--open" : ""}`}>
-        <div className="controls__collapse-inner">
+        <div className="controls__collapse-inner controls__collapse-inner--glow">
           <div className="controls__row" style={{ "--row-accent": "var(--accent-4)" } as AccentStyle}>
             <span className="controls__label">
               <span>Velocidad</span>
