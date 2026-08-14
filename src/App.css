@@ -85,6 +85,21 @@
   text-align: center;
 }
 
+/* Sits directly on the brand gradient (no card behind it), same case as
+   .total-duration — a translucent dark scrim keeps the dim informational
+   text legible everywhere on the gradient. */
+.fps-note {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+  opacity: 0.9;
+  text-align: center;
+  line-height: 1.5;
+  padding: 10px 16px;
+  border-radius: 12px;
+  background: color-mix(in srgb, #000 45%, transparent);
+}
+
 .app__overlay {
   position: fixed;
   inset: 0;
@@ -358,12 +373,9 @@
   min-height: 0;
 }
 
-/* Nudges the adjust step (preview + ajustes + action buttons) down from
-   the top edge by a small fixed amount. A fixed flex-basis (rather than
-   trim-screen's grow-based spacer) keeps the push modest and predictable
-   — this screen's content already nearly fills the shortest phone
-   viewports, so flex-shrink:1 lets the spacer collapse to 0 there
-   instead of forcing a scroll. */
+/* Same unequal-spacer centering as upload-screen/trim-screen, so this step
+   lands mid-screen too. On tall content the spacers just collapse toward 0
+   (flex-basis 0%, no min-height) instead of forcing a scroll. */
 .adjust-screen {
   flex: 1;
   min-height: 0;
@@ -373,7 +385,32 @@
 
 .adjust-screen::before {
   content: "";
-  flex: 0 1 22px;
+  flex: 0.8;
+  min-height: 0;
+}
+
+.adjust-screen::after {
+  content: "";
+  flex: 1.2;
+  min-height: 0;
+}
+
+.result-screen {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.result-screen::before {
+  content: "";
+  flex: 0.8;
+  min-height: 0;
+}
+
+.result-screen::after {
+  content: "";
+  flex: 1.2;
   min-height: 0;
 }
 
@@ -489,6 +526,13 @@
   max-height: 22svh;
   object-fit: contain;
   background: #000;
+  transition: transform 0.25s ease;
+}
+
+/* "Zoom punch" mode: useBoomerangPreview toggles this class on the reverse
+   leg to mirror the export's zoom-in-on-the-way-back effect. */
+.preview__video--zoom {
+  transform: scale(1.15);
 }
 
 .preview__live-badge {
@@ -608,6 +652,50 @@
   border-left: 3px solid var(--row-accent, var(--accent));
 }
 
+/* Smoothly grows/shrinks the Velocidad row when switching modes, instead of
+   the card snapping to its new height instantly. The 0fr/1fr grid-rows trick
+   animates an intrinsically-sized element without knowing its height ahead
+   of time — the inner wrapper clips the content while it's collapsing. */
+.controls__collapse {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.28s ease;
+}
+
+.controls__collapse--open {
+  grid-template-rows: 1fr;
+}
+
+.controls__collapse-inner {
+  overflow: hidden;
+  min-height: 0;
+  /* No padding here — this element is the one the grid stretches to 0
+     height when collapsed, and content-box padding would still occupy
+     space on top of that "0", leaving a visible sliver (exactly what was
+     happening: the row never fully closed). Any extra breathing room has
+     to live on a descendant instead, so it collapses away with the rest of
+     the content. */
+  /* The active chip's glow trails off past where the padding below gives it
+     room, so overflow:hidden's crisp cut still showed as a faint line.
+     Fading the last stretch of the box to transparent (instead of a hard
+     edge) hides that cut — by the time it happens there's nothing left to
+     see the seam of. */
+  -webkit-mask-image: linear-gradient(to bottom, black calc(100% - 8px), transparent 100%);
+  mask-image: linear-gradient(to bottom, black calc(100% - 8px), transparent 100%);
+}
+
+/* The active chip's glow (box-shadow) extends past its own box — without
+   this room, the fade above would have to eat into the chip itself. Keep
+   this taller than the fade zone above (8px), so the fade only touches the
+   glow's fading tail, never the chip's own visible pill. Scoped to rows
+   inside a collapsible section only — Modo/Calidad's rows sit directly in
+   the (non-clipping) card, so their glow was never at risk of being cut
+   off. */
+.controls__collapse-inner .controls__row {
+  padding-top: 2px;
+  padding-bottom: 10px;
+}
+
 .controls__note {
   font-size: 11px;
   color: var(--text-dim);
@@ -687,7 +775,7 @@
   background: var(--row-accent, var(--accent));
   border-color: transparent;
   color: #fff;
-  box-shadow: 0 4px 14px -2px color-mix(in srgb, var(--row-accent, var(--accent)) 60%, transparent);
+  box-shadow: 0 3px 8px -2px color-mix(in srgb, var(--row-accent, var(--accent)) 60%, transparent);
   transform: scale(1.04);
 }
 

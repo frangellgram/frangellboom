@@ -1,6 +1,6 @@
 import type { FFmpeg } from "@ffmpeg/ffmpeg";
 import { fetchFile } from "@ffmpeg/util";
-import { EASE_ZONES, forwardDuration, type Mode } from "./boomerangMath";
+import { EASE_ZONES, FREEZE_HOLD_SECONDS, PULSE_PULLBACK, forwardDuration, type Mode } from "./boomerangMath";
 
 export type Resolution = "original" | "1440" | "1080" | "720" | "480";
 export type Speed = 0.5 | 1 | 1.5 | 2;
@@ -14,6 +14,12 @@ const REVERSE_CHUNK_SECONDS: Partial<Record<Resolution, number>> = {
   original: 0.3,
   "1440": 0.4,
 };
+
+// "zoom" mode's constant punch-in applied to the whole reverse pass.
+const ZOOM_FACTOR = 1.15;
+const ZOOM_FILTER = `scale=iw*${ZOOM_FACTOR}:ih*${ZOOM_FACTOR},crop=iw/${ZOOM_FACTOR}:ih/${ZOOM_FACTOR}`;
+
+const ENCODE_ARGS = ["-c:v", "libx264", "-preset", "superfast", "-crf", "16", "-pix_fmt", "yuv420p"];
 
 export interface BoomerangOptions {
   start: number;
@@ -51,10 +57,15 @@ export async function createBoomerang(
   const reverseSteps: StepKind[] =
     reverseChunkCount > 1 ? [...Array(reverseChunkCount).fill("encode" as StepKind), "copy"] : ["encode"];
 
+  // "freeze" appends two tiny hold clips after the reverse pass; "pulse"
+  // appends its extra pull-back/push-forward legs there too — both add two
+  // more encode passes to the pipeline before the ping-pong concat.
+  const extraLegSteps: StepKind[] = mode === "freeze" || mode === "pulse" ? ["encode", "encode"] : [];
+
   const stepKinds: StepKind[] =
     mode === "ease"
-      ? ["encode", "encode", "encode", "copy", ...reverseSteps, "copy", "copy"]
-      : ["encode", ...reverseSteps, "copy", "copy"];
+      ? ["encode", "encode", "encode", "copy", ...reverseSteps, ...extraLegSteps, "copy", "copy"]
+      : ["encode", ...reverseSteps, ...extraLegSteps, "copy", "copy"];
   const weights = progressWeights(stepKinds);
 
   let stepIndex = 0;
@@ -93,10 +104,7 @@ export async function createBoomerang(
           "-i", inputName,
           "-vf", `setpts=(PTS-STARTPTS)/${factor}${scaleFilter}`,
           "-an",
-          "-c:v", "libx264",
-          "-preset", "superfast",
-          "-crf", "18",
-          "-pix_fmt", "yuv420p",
+          ...ENCODE_ARGS,
           name,
         ]);
         advance();
@@ -112,17 +120,15 @@ export async function createBoomerang(
     } else {
       // Trim to the chosen segment (+ speed + optional downscale), strip
       // audio, re-encode so cut points land on real frames instead of the
-      // nearest keyframe.
+      // nearest keyframe. "freeze"/"pulse"/"zoom" all share this exact same
+      // forward pass — they only differ in what happens after.
       await ffmpeg.exec([
         "-ss", start.toFixed(3),
         "-t", duration.toFixed(3),
         "-i", inputName,
         "-vf", `setpts=PTS/${speed}${scaleFilter}`,
         "-an",
-        "-c:v", "libx264",
-        "-preset", "superfast",
-        "-crf", "18",
-        "-pix_fmt", "yuv420p",
+        ...ENCODE_ARGS,
         "segment.mp4",
       ]);
       advance();
@@ -143,6 +149,11 @@ export async function createBoomerang(
     // order as reversing the whole thing at once (same idea as reversing a
     // deck of cards a few at a time), but peak memory only ever has to hold
     // one chunk instead of the whole segment.
+    //
+    // "zoom" mode rides along on this same reverse pass — its punch-in is
+    // just an extra filter tacked onto the same `-vf reverse`, applied to
+    // every chunk when chunked so the whole reverse pass stays zoomed.
+    const reverseVf = mode === "zoom" ? `reverse,${ZOOM_FILTER}` : "reverse";
     if (reverseChunkCount > 1) {
       const chunkFiles: string[] = [];
       for (let i = 0; i < reverseChunkCount; i++) {
@@ -153,12 +164,9 @@ export async function createBoomerang(
           "-ss", chunkStart.toFixed(3),
           "-t", chunkLength.toFixed(3),
           "-i", "segment.mp4",
-          "-vf", "reverse",
+          "-vf", reverseVf,
           "-an",
-          "-c:v", "libx264",
-          "-preset", "superfast",
-          "-crf", "18",
-          "-pix_fmt", "yuv420p",
+          ...ENCODE_ARGS,
           name,
         ]);
         advance();
@@ -177,23 +185,94 @@ export async function createBoomerang(
     } else {
       await ffmpeg.exec([
         "-i", "segment.mp4",
-        "-vf", "reverse",
+        "-vf", reverseVf,
         "-an",
-        "-c:v", "libx264",
-        "-preset", "superfast",
-        "-crf", "18",
-        "-pix_fmt", "yuv420p",
+        ...ENCODE_ARGS,
         "reversed.mp4",
       ]);
       advance();
     }
 
-    // Glue forward + reverse into a single ping-pong cycle.
-    await ffmpeg.writeFile("concat.txt", "file 'segment.mp4'\nfile 'reversed.mp4'\n");
+    // "freeze": two tiny extra clips, each grabbing a sliver of segment.mp4
+    // and padding it out with `tpad` (repeats the last decoded frame) —
+    // one holds on the peak frame before the reverse pass starts, one
+    // holds on the start frame before the next loop's forward pass starts.
+    // Built as their own small clips (rather than baking the hold into
+    // segment.mp4/reversed.mp4 directly) so they don't disturb the reverse
+    // chunk-duration math above.
+    if (mode === "freeze") {
+      const grab = 0.05;
+      const holdVf = `tpad=stop_mode=clone:stop_duration=${FREEZE_HOLD_SECONDS.toFixed(3)}`;
+      await ffmpeg.exec([
+        "-ss", Math.max(0, finalSegmentDuration - grab).toFixed(3),
+        "-t", grab.toFixed(3),
+        "-i", "segment.mp4",
+        "-vf", holdVf,
+        "-an",
+        ...ENCODE_ARGS,
+        "hold-end.mp4",
+      ]);
+      advance();
+      cleanupFiles.push("hold-end.mp4");
+
+      await ffmpeg.exec([
+        "-ss", "0",
+        "-t", grab.toFixed(3),
+        "-i", "segment.mp4",
+        "-vf", holdVf,
+        "-an",
+        ...ENCODE_ARGS,
+        "hold-start.mp4",
+      ]);
+      advance();
+      cleanupFiles.push("hold-start.mp4");
+    }
+
+    // "pulse": a quick stutter — after the full forward pass (segment.mp4)
+    // and before the full reverse (reversed.mp4), pull back part-way and
+    // push forward again. Both legs are cut from segment.mp4 itself (already
+    // speed-adjusted and scaled), just a sub-range re-encoded forward
+    // (legc) or reversed (legb).
+    if (mode === "pulse") {
+      const legStart = PULSE_PULLBACK * finalSegmentDuration;
+      const legSpan = finalSegmentDuration - legStart;
+      await ffmpeg.exec([
+        "-ss", legStart.toFixed(3),
+        "-t", legSpan.toFixed(3),
+        "-i", "segment.mp4",
+        "-vf", "reverse",
+        "-an",
+        ...ENCODE_ARGS,
+        "legb.mp4",
+      ]);
+      advance();
+      cleanupFiles.push("legb.mp4");
+
+      await ffmpeg.exec([
+        "-ss", legStart.toFixed(3),
+        "-t", legSpan.toFixed(3),
+        "-i", "segment.mp4",
+        "-an",
+        ...ENCODE_ARGS,
+        "legc.mp4",
+      ]);
+      advance();
+      cleanupFiles.push("legc.mp4");
+    }
+
+    // Glue every leg into a single ping-pong cycle. Classic/ease/zoom are
+    // just forward+reverse; freeze and pulse splice their extra legs in
+    // between.
+    const pingpongFiles =
+      mode === "freeze"
+        ? ["segment.mp4", "hold-end.mp4", "reversed.mp4", "hold-start.mp4"]
+        : mode === "pulse"
+          ? ["segment.mp4", "legb.mp4", "legc.mp4", "reversed.mp4"]
+          : ["segment.mp4", "reversed.mp4"];
+    await ffmpeg.writeFile("concat.txt", pingpongFiles.map((f) => `file '${f}'`).join("\n") + "\n");
     await ffmpeg.exec(["-f", "concat", "-safe", "0", "-i", "concat.txt", "-c", "copy", "pingpong.mp4"]);
     advance();
-    await del("segment.mp4");
-    await del("reversed.mp4");
+    for (const f of pingpongFiles) await del(f);
     await del("concat.txt");
 
     // Repeat the cycle without re-encoding. Built via the concat demuxer

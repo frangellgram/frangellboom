@@ -9,29 +9,21 @@ import { ResultView } from "./components/ResultView";
 import { getFFmpeg } from "./lib/ffmpegClient";
 import { createBoomerang, type Resolution, type Speed, type Mode } from "./lib/boomerang";
 import { extractPreviewClip } from "./lib/previewClip";
-import { totalBoomerangDuration, forwardDuration } from "./lib/boomerangMath";
+import { probeFrameRate } from "./lib/probeVideo";
+import { totalBoomerangDuration, deriveLoops } from "./lib/boomerangMath";
 import "./App.css";
+
+// Below this, 0.5x slow motion starts looking choppy instead of smooth —
+// setpts just stretches existing frames over more time, it doesn't
+// interpolate new ones in between, so a 30fps source ends up playing back
+// at an effective ~15fps once slowed down.
+const CHOPPY_SLOWMO_FPS_THRESHOLD = 48;
 
 type Step = "upload" | "trim" | "adjust" | "processing" | "result";
 
 const DEFAULT_SEGMENT = 2;
 const MIN_SEGMENT = 0.5;
 const MAX_SEGMENT = 2;
-const MIN_TOTAL_SECONDS = 8;
-const MAX_TOTAL_SECONDS = 14;
-const ABSOLUTE_MAX_LOOPS = 40;
-
-// A boomerang should never feel too short (padded up to MIN_TOTAL_SECONDS by
-// adding loops) or run past MAX_TOTAL_SECONDS, whatever speed/mode/segment
-// combination produced it.
-function loopsRangeFor(mode: Mode, speed: Speed, segmentDuration: number): [number, number] {
-  const fwd = forwardDuration(mode, speed, segmentDuration);
-  if (fwd <= 0) return [1, 1];
-  const perLoop = fwd * 2;
-  const min = Math.max(1, Math.ceil(MIN_TOTAL_SECONDS / perLoop));
-  const max = Math.max(min, Math.min(ABSOLUTE_MAX_LOOPS, Math.floor(MAX_TOTAL_SECONDS / perLoop)));
-  return [min, max];
-}
 
 function App() {
   const [step, setStep] = useState<Step>("upload");
@@ -40,16 +32,16 @@ function App() {
   const [duration, setDuration] = useState(0);
   const [start, setStart] = useState(0);
   const [segmentDuration, setSegmentDuration] = useState(DEFAULT_SEGMENT);
-  const [loops, setLoops] = useState(3);
   const [speed, setSpeed] = useState<Speed>(1);
   const [mode, setMode] = useState<Mode>("classic");
-  const [resolution, setResolution] = useState<Resolution>("1080");
+  const [resolution, setResolution] = useState<Resolution>("original");
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
   const [processingLabel, setProcessingLabel] = useState("Preparando…");
   const [resultBlob, setResultBlob] = useState<Blob | null>(null);
   const [previewClipUrl, setPreviewClipUrl] = useState<string | null>(null);
   const [preparingPreview, setPreparingPreview] = useState(false);
+  const [sourceFps, setSourceFps] = useState<number | null>(null);
   const ffmpegPreload = useRef(false);
 
   // Kick off the (large) ffmpeg-core download as soon as the user lands,
@@ -68,6 +60,7 @@ function App() {
     setDuration(0);
     setStart(0);
     setSegmentDuration(DEFAULT_SEGMENT);
+    setSourceFps(null);
     setVideoUrl((prev) => {
       if (prev) URL.revokeObjectURL(prev);
       return URL.createObjectURL(selected);
@@ -77,6 +70,14 @@ function App() {
       return null;
     });
     setStep("trim");
+
+    // Fire-and-forget: reads the source fps in the background while the
+    // person trims, so it's already known by the time they'd reach the
+    // 0.5x speed picker on the adjust screen.
+    getFFmpeg()
+      .then((ffmpeg) => probeFrameRate(ffmpeg, selected))
+      .then(setSourceFps)
+      .catch(() => {});
   }, []);
 
   const handleReset = useCallback(() => {
@@ -85,6 +86,7 @@ function App() {
     setResultBlob(null);
     setError(null);
     setProgress(0);
+    setSourceFps(null);
     setVideoUrl((prev) => {
       if (prev) URL.revokeObjectURL(prev);
       return null;
@@ -98,18 +100,18 @@ function App() {
   const maxSegmentDuration = duration > 0 ? Math.min(duration, MAX_SEGMENT) : DEFAULT_SEGMENT;
   const clampedSegmentDuration = Math.min(segmentDuration, maxSegmentDuration);
 
-  // However fast/slow or "ease" the ping-pong plays, the final export must
-  // land between MIN_TOTAL_SECONDS and MAX_TOTAL_SECONDS — so the loop
-  // count's own range is derived live from the current segment/speed/mode
-  // instead of being fixed numbers.
-  const [minLoops, maxLoops] = useMemo(
-    () => loopsRangeFor(mode, speed, clampedSegmentDuration),
-    [mode, speed, clampedSegmentDuration],
-  );
+  // Only "classic" exposes a speed picker — every other mode has a fixed,
+  // baked-in motion (see legsFor in boomerangMath), so its effective speed
+  // is always 1 regardless of whatever the (hidden) speed picker last held.
+  const effectiveSpeed: Speed = mode === "classic" ? speed : 1;
 
-  useEffect(() => {
-    setLoops((current) => Math.min(Math.max(current, minLoops), maxLoops));
-  }, [minLoops, maxLoops]);
+  // No more a user-editable loop count: it's derived to land close to a
+  // fixed target total duration per mode/speed (Instagram-style — normal
+  // vs. slow motion each have one "right" length, not a range to pick from).
+  const loops = useMemo(
+    () => deriveLoops(mode, effectiveSpeed, clampedSegmentDuration),
+    [mode, effectiveSpeed, clampedSegmentDuration],
+  );
 
   const handleCreate = useCallback(async () => {
     if (!file) return;
@@ -125,7 +127,7 @@ function App() {
         duration: clampedSegmentDuration,
         loops,
         resolution,
-        speed,
+        speed: effectiveSpeed,
         mode,
         onProgress: setProgress,
       });
@@ -136,7 +138,7 @@ function App() {
       setError("No se pudo procesar el video. Probá con un clip más corto o recargá la página.");
       setStep("adjust");
     }
-  }, [file, start, clampedSegmentDuration, loops, resolution, speed, mode]);
+  }, [file, start, clampedSegmentDuration, loops, resolution, effectiveSpeed, mode]);
 
   const handleGoToAdjust = useCallback(async () => {
     if (!file) return;
@@ -163,9 +165,12 @@ function App() {
   }, [file, start, clampedSegmentDuration]);
 
   const totalDuration = useMemo(
-    () => totalBoomerangDuration(mode, speed, clampedSegmentDuration, loops),
-    [mode, speed, clampedSegmentDuration, loops],
+    () => totalBoomerangDuration(mode, effectiveSpeed, clampedSegmentDuration, loops),
+    [mode, effectiveSpeed, clampedSegmentDuration, loops],
   );
+
+  const showFpsNote =
+    mode === "classic" && effectiveSpeed === 0.5 && sourceFps !== null && sourceFps < CHOPPY_SLOWMO_FPS_THRESHOLD;
 
   return (
     <div className="app">
@@ -238,7 +243,7 @@ function App() {
                 videoUrl={previewClipUrl ?? videoUrl}
                 start={previewClipUrl ? 0 : start}
                 duration={clampedSegmentDuration}
-                speed={speed}
+                speed={effectiveSpeed}
                 mode={mode}
               />
 
@@ -248,10 +253,6 @@ function App() {
               </p>
 
               <BoomerangControls
-                loops={loops}
-                onLoopsChange={setLoops}
-                minLoops={minLoops}
-                maxLoops={maxLoops}
                 speed={speed}
                 onSpeedChange={setSpeed}
                 mode={mode}
@@ -276,6 +277,20 @@ function App() {
                   Crear boomerang
                 </button>
               </div>
+
+              <div
+                className={`controls__collapse${showFpsNote ? " controls__collapse--open" : ""}`}
+              >
+                <div className="controls__collapse-inner">
+                  {sourceFps !== null && (
+                    <p className="fps-note">
+                      Este video se grabó a {Math.round(sourceFps)}fps a 0.5x el movimiento puede verse algo
+                      entrecortado en vez de un slow motion fluido. Para un resultado más suave, grabá a 60fps o
+                      más.
+                    </p>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -286,7 +301,11 @@ function App() {
           </div>
         )}
 
-        {step === "result" && resultBlob && <ResultView blob={resultBlob} onReset={handleReset} />}
+        {step === "result" && resultBlob && (
+          <div className="result-screen">
+            <ResultView blob={resultBlob} onReset={handleReset} />
+          </div>
+        )}
       </main>
     </div>
   );

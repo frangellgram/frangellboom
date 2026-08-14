@@ -23,11 +23,11 @@ export function ResultView({ blob, onReset }: ResultViewProps) {
   return (
     <div className="result">
       <Confetti />
-      <p className="result__headline">🎉 ¡Tu boomerang está listo!</p>
+      <p className="result__headline">¡Tu boomerang está listo!</p>
       <video src={url} className="result__video" autoPlay loop muted playsInline controls />
       <div className="result__actions">
         <a className="btn btn--primary" href={url} download="frangellboom.mp4">
-          ⬇ Descargar
+          Descargar
         </a>
         <button type="button" className="btn btn--ghost" onClick={onReset}>
           Crear otro

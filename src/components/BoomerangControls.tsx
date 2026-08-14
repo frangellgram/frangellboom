@@ -4,10 +4,6 @@ import type { Mode, Resolution, Speed } from "../lib/boomerang";
 type AccentStyle = CSSProperties & { "--row-accent"?: string };
 
 interface BoomerangControlsProps {
-  loops: number;
-  onLoopsChange: (value: number) => void;
-  minLoops: number;
-  maxLoops: number;
   speed: Speed;
   onSpeedChange: (value: Speed) => void;
   mode: Mode;
@@ -17,15 +13,19 @@ interface BoomerangControlsProps {
 }
 
 const MODE_OPTIONS: { value: Mode; label: string }[] = [
-  { value: "classic", label: "🎯 Clásico" },
-  { value: "ease", label: "🌊 Ease" },
+  { value: "classic", label: "Clásico" },
+  { value: "ease", label: "Ease" },
+  { value: "freeze", label: "Freeze" },
+  { value: "pulse", label: "Pulso" },
+  { value: "zoom", label: "Zoom" },
 ];
 
+// Only "classic" exposes a speed picker (see App.tsx) — every other mode has
+// a fixed, non-configurable motion, so only the two speeds that have a clear
+// identity survive: normal and slow motion.
 const SPEED_OPTIONS: { value: Speed; label: string }[] = [
   { value: 0.5, label: "0.5×" },
   { value: 1, label: "1×" },
-  { value: 1.5, label: "1.5×" },
-  { value: 2, label: "2×" },
 ];
 
 const RESOLUTION_OPTIONS: { value: Resolution; label: string }[] = [
@@ -37,10 +37,6 @@ const RESOLUTION_OPTIONS: { value: Resolution; label: string }[] = [
 ];
 
 export function BoomerangControls({
-  loops,
-  onLoopsChange,
-  minLoops,
-  maxLoops,
   speed,
   onSpeedChange,
   mode,
@@ -54,52 +50,9 @@ export function BoomerangControls({
         <span className="controls__heading">Ajustes</span>
       </div>
 
-      <div className="controls__row" style={{ "--row-accent": "var(--accent-3)" } as AccentStyle}>
-        <span className="controls__label">
-          <span>🔁 Repeticiones</span>
-          <span className="controls__value">×{loops}</span>
-        </span>
-        <div className="chips" role="group" aria-label="Repeticiones disponibles">
-          {Array.from({ length: maxLoops - minLoops + 1 }, (_, i) => minLoops + i).map((n) => (
-            <button
-              key={n}
-              type="button"
-              className={`chip${n === loops ? " chip--active" : ""}`}
-              onClick={() => onLoopsChange(n)}
-              aria-current={n === loops}
-            >
-              ×{n}
-            </button>
-          ))}
-        </div>
-        <p className="controls__note">
-          {minLoops === maxLoops
-            ? `Con esta velocidad y modo, solo entra ×${minLoops}, para quedar entre 8 y 14s.`
-            : `Con esta velocidad y modo, entre ×${minLoops} y ×${maxLoops}, para quedar entre 8 y 14s.`}
-        </p>
-      </div>
-
-      <div className="controls__row" style={{ "--row-accent": "var(--accent-4)" } as AccentStyle}>
-        <span className="controls__label">
-          <span>⚡ Velocidad</span>
-        </span>
-        <div className="chips">
-          {SPEED_OPTIONS.map((opt) => (
-            <button
-              key={opt.value}
-              type="button"
-              className={`chip${speed === opt.value ? " chip--active" : ""}`}
-              onClick={() => onSpeedChange(opt.value)}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
       <div className="controls__row" style={{ "--row-accent": "var(--accent)" } as AccentStyle}>
         <span className="controls__label">
-          <span>🎬 Modo</span>
+          <span>Modo</span>
         </span>
         <div className="chips">
           {MODE_OPTIONS.map((opt) => (
@@ -115,9 +68,31 @@ export function BoomerangControls({
         </div>
       </div>
 
+      <div className={`controls__collapse${mode === "classic" ? " controls__collapse--open" : ""}`}>
+        <div className="controls__collapse-inner">
+          <div className="controls__row" style={{ "--row-accent": "var(--accent-4)" } as AccentStyle}>
+            <span className="controls__label">
+              <span>Velocidad</span>
+            </span>
+            <div className="chips">
+              {SPEED_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  className={`chip${speed === opt.value ? " chip--active" : ""}`}
+                  onClick={() => onSpeedChange(opt.value)}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div className="controls__row" style={{ "--row-accent": "var(--accent-2)" } as AccentStyle}>
         <span className="controls__label">
-          <span>✨ Calidad de salida</span>
+          <span>Calidad de salida</span>
         </span>
         <div className="chips">
           {RESOLUTION_OPTIONS.map((opt) => (
