@@ -34,6 +34,10 @@ function App() {
   const [resultBlob, setResultBlob] = useState<Blob | null>(null);
   const [previewClipUrl, setPreviewClipUrl] = useState<string | null>(null);
   const [preparingPreview, setPreparingPreview] = useState(false);
+  // Recorded clips are always exactly MAX_SEGMENT already — there's nothing
+  // left to trim, so "adjust" needs to know not to offer going back to a
+  // trim step that would have nothing meaningful to show.
+  const [fileSource, setFileSource] = useState<"upload" | "record">("upload");
   const ffmpegPreload = useRef(false);
 
   // Kick off the (large) ffmpeg-core download as soon as the user lands,
@@ -48,6 +52,7 @@ function App() {
 
   const handleSelect = useCallback((selected: File) => {
     setError(null);
+    setFileSource("upload");
     setFile(selected);
     setDuration(0);
     setStart(0);
@@ -70,6 +75,7 @@ function App() {
   // scrub preview) in one go.
   const handleRecorded = useCallback((recorded: File) => {
     setError(null);
+    setFileSource("record");
     setFile(recorded);
     setDuration(MAX_SEGMENT);
     setStart(0);
@@ -308,9 +314,20 @@ function App() {
               {error && <p className="app__error">{error}</p>}
 
               <div className="editor__actions">
-                <button type="button" className="btn btn--ghost" onClick={() => setStep("trim")}>
-                  ← Recortar
-                </button>
+                {fileSource === "record" ? (
+                  // A recorded clip is always exactly MAX_SEGMENT already —
+                  // there's no trim step to go back to, so this restarts
+                  // from the beginning (pick a file, or record again)
+                  // instead of showing a "2.1s" trim screen with nothing
+                  // real left to trim.
+                  <button type="button" className="btn btn--ghost" onClick={handleReset}>
+                    ← Volver
+                  </button>
+                ) : (
+                  <button type="button" className="btn btn--ghost" onClick={() => setStep("trim")}>
+                    ← Recortar
+                  </button>
+                )}
                 <button
                   type="button"
                   className="btn btn--primary"
