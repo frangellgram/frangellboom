@@ -1,23 +1,14 @@
 import { useCallback, useRef, useState } from "react";
-import { VideoRecorder } from "./VideoRecorder";
 
 interface VideoUploaderProps {
   onSelect: (file: File) => void;
-  onRecord: (file: File) => void;
   error?: string | null;
 }
 
-// Only show the record option where it can actually work — iOS Safari and
-// most modern mobile browsers, not e.g. an old WebView without MediaRecorder.
-const canRecord =
-  typeof navigator !== "undefined" &&
-  typeof navigator.mediaDevices?.getUserMedia === "function" &&
-  typeof MediaRecorder !== "undefined";
-
-export function VideoUploader({ onSelect, onRecord, error }: VideoUploaderProps) {
+export function VideoUploader({ onSelect, error }: VideoUploaderProps) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const recordInputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
-  const [recording, setRecording] = useState(false);
 
   const handleFiles = useCallback(
     (files: FileList | null) => {
@@ -66,27 +57,34 @@ export function VideoUploader({ onSelect, onRecord, error }: VideoUploaderProps)
         {error && <p className="uploader__error">{error}</p>}
       </div>
 
-      {canRecord && (
-        <button type="button" className="btn btn--ghost uploader__record-btn" onClick={() => setRecording(true)}>
-          <span className="uploader__record-dot" aria-hidden="true" />
-          Grabar video
-        </button>
-      )}
+      {/* `capture="environment"` sends mobile browsers straight into the
+          native camera app instead of the photo library picker — the actual
+          system Camera app records the file, so there's none of the
+          getUserMedia/MediaRecorder orientation and quality quirks a custom
+          in-page recorder has on iOS Safari. Ignored gracefully on desktop,
+          where it just behaves like the picker above. */}
+      <button
+        type="button"
+        className="btn btn--ghost uploader__record-btn"
+        onClick={() => recordInputRef.current?.click()}
+      >
+        <span className="uploader__record-dot" aria-hidden="true" />
+        Grabar video
+      </button>
+      <input
+        ref={recordInputRef}
+        type="file"
+        accept="video/*"
+        capture="environment"
+        className="uploader__input"
+        onChange={(e) => handleFiles(e.target.files)}
+      />
 
       <div className="uploader__badges">
         <span className="badge">100% en tu dispositivo</span>
         <span className="uploader__badges-dot" aria-hidden="true" />
         <span className="badge">Sin límites de calidad</span>
       </div>
-
-      {recording && (
-        // No setRecording(false) on capture — VideoRecorder shows its own
-        // "Preparando…" state and stays mounted until App switches `step`
-        // away from "upload" once it lands on "adjust". Closing this first
-        // and trusting App to swap screens a beat later left a gap where
-        // the bare dropzone above could flash into view in between.
-        <VideoRecorder onCapture={onRecord} onCancel={() => setRecording(false)} />
-      )}
     </div>
   );
 }
