@@ -29,6 +29,8 @@ const SPEED_OPTIONS: { value: Speed; label: string }[] = [
 ];
 
 const RESOLUTION_OPTIONS: { value: Resolution; label: string }[] = [
+  { value: "original", label: "Original" },
+  { value: "1440", label: "2K" },
   { value: "1080", label: "1080p" },
   { value: "720", label: "720p" },
   { value: "480", label: "480p" },

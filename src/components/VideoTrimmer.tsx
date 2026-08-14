@@ -65,10 +65,33 @@ export function VideoTrimmer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [duration, segmentDuration]);
 
+  // Keeps the video looping just the selected window so scrubbing the
+  // handles previews the actual boomerang segment instead of a frozen frame.
+  // Refs (not state) back the timeupdate bound check so the listener isn't
+  // torn down and re-added on every pointermove while dragging.
+  const startRef = useRef(start);
+  const segmentDurationRef = useRef(segmentDuration);
+  startRef.current = start;
+  segmentDurationRef.current = segmentDuration;
+
   useEffect(() => {
     const video = videoRef.current;
-    if (video) video.currentTime = start;
-  }, [start]);
+    if (!video) return;
+    const handleTimeUpdate = () => {
+      if (video.currentTime >= startRef.current + segmentDurationRef.current) {
+        video.currentTime = startRef.current;
+      }
+    };
+    video.addEventListener("timeupdate", handleTimeUpdate);
+    return () => video.removeEventListener("timeupdate", handleTimeUpdate);
+  }, []);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    video.currentTime = start;
+    video.play().catch(() => {});
+  }, [start, segmentDuration]);
 
   const leftPct = duration > 0 ? (start / duration) * 100 : 0;
   const widthPct = duration > 0 ? (segmentDuration / duration) * 100 : 0;
@@ -84,10 +107,8 @@ export function VideoTrimmer({
           playsInline
           onLoadedMetadata={(e) => {
             onDurationChange(e.currentTarget.duration);
-            // iOS Safari never decodes a frame for a <video> that hasn't
-            // played yet, so seeking alone leaves it black. A silent
-            // play/pause "primes" the decoder before we start scrubbing it.
-            e.currentTarget.play().then(() => e.currentTarget.pause()).catch(() => {});
+            e.currentTarget.currentTime = start;
+            e.currentTarget.play().catch(() => {});
           }}
         />
       </div>
@@ -103,7 +124,7 @@ export function VideoTrimmer({
       </div>
       <div className="trimmer__labels">
         <span>{formatTime(start)}</span>
-        <span>{formatTime(start + segmentDuration)} · {segmentDuration.toFixed(1)}s seleccionados</span>
+        <span>{segmentDuration.toFixed(1)}s seleccionados</span>
         <span>{formatTime(duration)}</span>
       </div>
     </div>
