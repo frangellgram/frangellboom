@@ -34,7 +34,7 @@ function extForMimeType(mimeType: string): string {
   return mimeType.startsWith("video/mp4") ? ".mp4" : ".webm";
 }
 
-type RecorderState = "requesting" | "live" | "recording" | "denied" | "unsupported";
+type RecorderState = "requesting" | "live" | "recording" | "done" | "denied" | "unsupported";
 
 export function VideoRecorder({ onCapture, onCancel }: VideoRecorderProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -71,17 +71,18 @@ export function VideoRecorder({ onCapture, onCancel }: VideoRecorderProps) {
     let cancelled = false;
     // Rear camera by default (this records subjects, not selfies), but
     // "ideal" (not "exact") so devices without one — a laptop webcam during
-    // testing — still get a stream instead of a hard failure. Resolution
-    // and frame rate are also just "ideal": getUserMedia otherwise falls
-    // back to a modest default (e.g. 30fps) far below what the phone's own
-    // camera app can do, so ask for the phone's best without hard-requiring
-    // 4K60 on devices/browsers that can't deliver it.
+    // testing — still get a stream instead of a hard failure. frameRate is
+    // also just "ideal": getUserMedia otherwise falls back to a modest
+    // default (e.g. 30fps) far below what the phone's own camera app can
+    // do. Deliberately not requesting a width/height here — pinning an
+    // explicit (landscape-shaped, e.g. 3840x2160) resolution while the
+    // phone is held in portrait made some devices' cameras hunt/renegotiate
+    // lenses mid-preview; leaving it unset lets the browser pick its normal
+    // portrait-appropriate resolution instead.
     navigator.mediaDevices
       .getUserMedia({
         video: {
           facingMode: { ideal: "environment" },
-          width: { ideal: 3840 },
-          height: { ideal: 2160 },
           frameRate: { ideal: 60 },
         },
         audio: false,
@@ -110,43 +111,61 @@ export function VideoRecorder({ onCapture, onCancel }: VideoRecorderProps) {
     };
   }, [stopStream]);
 
-  const handleRecord = useCallback(() => {
-    const stream = streamRef.current;
-    const mimeType = pickMimeType();
-    if (!stream || !mimeType) {
-      setState("unsupported");
-      return;
-    }
+  const handleRecord = useCallback(
+    (e: React.PointerEvent<HTMLButtonElement>) => {
+      // Instagram-style press-and-hold, not tap — people's thumbs are
+      // trained to hold this kind of button down. Firing on pointerdown
+      // (rather than click, which only fires on release) is what makes a
+      // hold actually start the recording instead of just sitting there.
+      // preventDefault stops the browser from treating the hold as a
+      // long-press text-selection gesture on the button.
+      e.preventDefault();
+      if (recorderRef.current) return;
 
-    chunksRef.current = [];
-    const recorder = new MediaRecorder(stream, { mimeType });
-    recorder.ondataavailable = (e) => {
-      if (e.data.size > 0) chunksRef.current.push(e.data);
-    };
-    recorder.onstop = () => {
-      stopStream();
-      if (cancelledRef.current) return;
-      const blob = new Blob(chunksRef.current, { type: mimeType });
-      const file = new File([blob], `grabacion${extForMimeType(mimeType)}`, { type: mimeType });
-      onCapture(file);
-    };
-    recorderRef.current = recorder;
-    recorder.start();
-    setState("recording");
-    setElapsed(0);
+      const stream = streamRef.current;
+      const mimeType = pickMimeType();
+      if (!stream || !mimeType) {
+        setState("unsupported");
+        return;
+      }
 
-    const startedAt = performance.now();
-    const tick = () => {
-      const secs = Math.min((performance.now() - startedAt) / 1000, RECORD_SECONDS);
-      setElapsed(secs);
-      if (secs < RECORD_SECONDS) requestAnimationFrame(tick);
-    };
-    requestAnimationFrame(tick);
+      chunksRef.current = [];
+      const recorder = new MediaRecorder(stream, { mimeType });
+      recorder.ondataavailable = (ev) => {
+        if (ev.data.size > 0) chunksRef.current.push(ev.data);
+      };
+      recorder.onstop = () => {
+        stopStream();
+        if (cancelledRef.current) return;
+        // Switches to a loading message instead of unmounting itself — the
+        // parent only actually removes this component once it's ready to
+        // show "adjust" in its place. Closing this overlay first and
+        // trusting the parent to swap in "adjust" a beat later left a gap
+        // where the bare upload screen could flash into view in between.
+        setState("done");
+        const blob = new Blob(chunksRef.current, { type: mimeType });
+        const file = new File([blob], `grabacion${extForMimeType(mimeType)}`, { type: mimeType });
+        onCapture(file);
+      };
+      recorderRef.current = recorder;
+      recorder.start();
+      setState("recording");
+      setElapsed(0);
 
-    stopTimerRef.current = window.setTimeout(() => {
-      if (recorder.state !== "inactive") recorder.stop();
-    }, RECORD_MS);
-  }, [stopStream, onCapture]);
+      const startedAt = performance.now();
+      const tick = () => {
+        const secs = Math.min((performance.now() - startedAt) / 1000, RECORD_SECONDS);
+        setElapsed(secs);
+        if (secs < RECORD_SECONDS) requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+
+      stopTimerRef.current = window.setTimeout(() => {
+        if (recorder.state !== "inactive") recorder.stop();
+      }, RECORD_MS);
+    },
+    [stopStream, onCapture],
+  );
 
   const handleCancel = useCallback(() => {
     cancelledRef.current = true;
@@ -190,7 +209,8 @@ export function VideoRecorder({ onCapture, onCancel }: VideoRecorderProps) {
             <button
               type="button"
               className={`recorder__record-btn${state === "recording" ? " recorder__record-btn--active" : ""}`}
-              onClick={handleRecord}
+              onPointerDown={handleRecord}
+              onContextMenu={(e) => e.preventDefault()}
               disabled={state === "recording"}
               aria-label="Grabar"
             />
@@ -198,6 +218,8 @@ export function VideoRecorder({ onCapture, onCancel }: VideoRecorderProps) {
         )}
 
         {state === "requesting" && <p className="recorder__message">Pidiendo acceso a la cámara…</p>}
+
+        {state === "done" && <p className="recorder__message">Preparando tu video…</p>}
 
         {state === "denied" && (
           <p className="recorder__message">

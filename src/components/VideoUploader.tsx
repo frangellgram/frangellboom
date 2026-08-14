@@ -80,13 +80,12 @@ export function VideoUploader({ onSelect, onRecord, error }: VideoUploaderProps)
       </div>
 
       {recording && (
-        <VideoRecorder
-          onCapture={(file) => {
-            setRecording(false);
-            onRecord(file);
-          }}
-          onCancel={() => setRecording(false)}
-        />
+        // No setRecording(false) on capture — VideoRecorder shows its own
+        // "Preparando…" state and stays mounted until App switches `step`
+        // away from "upload" once it lands on "adjust". Closing this first
+        // and trusting App to swap screens a beat later left a gap where
+        // the bare dropzone above could flash into view in between.
+        <VideoRecorder onCapture={onRecord} onCancel={() => setRecording(false)} />
       )}
     </div>
   );
