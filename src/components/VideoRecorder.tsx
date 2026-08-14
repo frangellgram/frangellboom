@@ -51,20 +51,52 @@ export function VideoRecorder({ onCapture, onCancel }: VideoRecorderProps) {
     streamRef.current = null;
   }, []);
 
+  // Attaches whatever stream we currently have to the <video> element the
+  // moment it exists. A plain useEffect keyed on the stream isn't enough
+  // here: the <video> only mounts once `state` flips to "live", which
+  // happens *after* getUserMedia resolves, so by the time that promise
+  // callback ran, videoRef.current was still null and the preview stayed
+  // black (recording itself still worked fine — MediaRecorder reads the
+  // stream directly, never through this element).
+  const attachVideo = useCallback((node: HTMLVideoElement | null) => {
+    videoRef.current = node;
+    if (node && streamRef.current) {
+      node.srcObject = streamRef.current;
+      node.muted = true;
+      node.play().catch(() => {});
+    }
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     // Rear camera by default (this records subjects, not selfies), but
     // "ideal" (not "exact") so devices without one — a laptop webcam during
-    // testing — still get a stream instead of a hard failure.
+    // testing — still get a stream instead of a hard failure. Resolution
+    // and frame rate are also just "ideal": getUserMedia otherwise falls
+    // back to a modest default (e.g. 30fps) far below what the phone's own
+    // camera app can do, so ask for the phone's best without hard-requiring
+    // 4K60 on devices/browsers that can't deliver it.
     navigator.mediaDevices
-      .getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false })
+      .getUserMedia({
+        video: {
+          facingMode: { ideal: "environment" },
+          width: { ideal: 3840 },
+          height: { ideal: 2160 },
+          frameRate: { ideal: 60 },
+        },
+        audio: false,
+      })
       .then((stream) => {
         if (cancelled) {
           stream.getTracks().forEach((t) => t.stop());
           return;
         }
         streamRef.current = stream;
-        if (videoRef.current) videoRef.current.srcObject = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.muted = true;
+          videoRef.current.play().catch(() => {});
+        }
         setState("live");
       })
       .catch(() => {
@@ -146,7 +178,7 @@ export function VideoRecorder({ onCapture, onCancel }: VideoRecorderProps) {
 
         {(state === "live" || state === "recording") && (
           <>
-            <video ref={videoRef} className="recorder__video" autoPlay muted playsInline />
+            <video ref={attachVideo} className="recorder__video" autoPlay muted playsInline />
             <div className="recorder__timer">
               <div className="recorder__timer-bar">
                 <div className="recorder__timer-fill" style={{ width: `${pct}%` }} />
