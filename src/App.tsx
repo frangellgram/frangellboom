@@ -9,15 +9,8 @@ import { ResultView } from "./components/ResultView";
 import { getFFmpeg, withFFmpeg, resetFFmpeg } from "./lib/ffmpegClient";
 import { createBoomerang, type Resolution, type Speed, type Mode } from "./lib/boomerang";
 import { extractPreviewClip } from "./lib/previewClip";
-import { probeFrameRate } from "./lib/probeVideo";
 import { totalBoomerangDuration, deriveLoops } from "./lib/boomerangMath";
 import "./App.css";
-
-// Below this, 0.5x slow motion starts looking choppy instead of smooth —
-// setpts just stretches existing frames over more time, it doesn't
-// interpolate new ones in between, so a 30fps source ends up playing back
-// at an effective ~15fps once slowed down.
-const CHOPPY_SLOWMO_FPS_THRESHOLD = 48;
 
 type Step = "upload" | "trim" | "adjust" | "processing" | "result";
 
@@ -41,7 +34,6 @@ function App() {
   const [resultBlob, setResultBlob] = useState<Blob | null>(null);
   const [previewClipUrl, setPreviewClipUrl] = useState<string | null>(null);
   const [preparingPreview, setPreparingPreview] = useState(false);
-  const [sourceFps, setSourceFps] = useState<number | null>(null);
   const ffmpegPreload = useRef(false);
 
   // Kick off the (large) ffmpeg-core download as soon as the user lands,
@@ -60,7 +52,6 @@ function App() {
     setDuration(0);
     setStart(0);
     setSegmentDuration(DEFAULT_SEGMENT);
-    setSourceFps(null);
     setVideoUrl((prev) => {
       if (prev) URL.revokeObjectURL(prev);
       return URL.createObjectURL(selected);
@@ -70,15 +61,6 @@ function App() {
       return null;
     });
     setStep("trim");
-
-    // Fire-and-forget: reads the source fps in the background while the
-    // person trims, so it's already known by the time they'd reach the
-    // 0.5x speed picker on the adjust screen. Routed through withFFmpeg so
-    // it can't overlap with the preview-clip extraction or the export
-    // itself — ffmpeg.wasm isn't safe to drive concurrently.
-    withFFmpeg((ffmpeg) => probeFrameRate(ffmpeg, selected))
-      .then(setSourceFps)
-      .catch(() => {});
   }, []);
 
   // Recorded clips come out of VideoRecorder already at exactly MAX_SEGMENT
@@ -92,7 +74,6 @@ function App() {
     setDuration(MAX_SEGMENT);
     setStart(0);
     setSegmentDuration(MAX_SEGMENT);
-    setSourceFps(null);
     setVideoUrl((prev) => {
       if (prev) URL.revokeObjectURL(prev);
       return URL.createObjectURL(recorded);
@@ -102,9 +83,15 @@ function App() {
       return null;
     });
 
-    withFFmpeg((ffmpeg) => probeFrameRate(ffmpeg, recorded))
-      .then(setSourceFps)
-      .catch(() => {});
+    // Jump to "adjust" immediately instead of waiting on the (ffmpeg-driven)
+    // scrub-preview clip first — that call can take a couple of seconds
+    // (cold-loading the wasm core included), and blocking the transition on
+    // it meant the bare upload screen flashed back into view for that whole
+    // stretch before suddenly jumping to "adjust". BoomerangPreview already
+    // has a graceful fallback for exactly this case (videoUrl ??
+    // previewClipUrl below): it scrubs the freshly recorded file directly
+    // until the nicer preview clip is ready, then swaps over on its own.
+    setStep("adjust");
 
     setPreparingPreview(true);
     withFFmpeg((ffmpeg) => extractPreviewClip(ffmpeg, recorded, { start: 0, duration: MAX_SEGMENT }))
@@ -121,7 +108,6 @@ function App() {
       })
       .finally(() => {
         setPreparingPreview(false);
-        setStep("adjust");
       });
   }, []);
 
@@ -131,7 +117,6 @@ function App() {
     setResultBlob(null);
     setError(null);
     setProgress(0);
-    setSourceFps(null);
     setVideoUrl((prev) => {
       if (prev) URL.revokeObjectURL(prev);
       return null;
@@ -224,8 +209,11 @@ function App() {
     [mode, effectiveSpeed, clampedSegmentDuration, loops],
   );
 
-  const showFpsNote =
-    mode === "classic" && effectiveSpeed === 0.5 && sourceFps !== null && sourceFps < CHOPPY_SLOWMO_FPS_THRESHOLD;
+  // Fixed note, not tied to a detected fps value — probing the actual
+  // source fps turned out unreliable in practice, so instead of trying to
+  // detect and report a (possibly wrong) number, this just always surfaces
+  // the general caveat whenever 0.5x is selected.
+  const showFpsNote = mode === "classic" && effectiveSpeed === 0.5;
 
   return (
     <div className="app">
@@ -337,13 +325,10 @@ function App() {
                 className={`controls__collapse${showFpsNote ? " controls__collapse--open" : ""}`}
               >
                 <div className="controls__collapse-inner">
-                  {sourceFps !== null && (
-                    <p className="fps-note">
-                      Este video se grabó a {Math.round(sourceFps)}fps, a 0.5x el movimiento puede verse algo
-                      entrecortado en vez de un slow motion fluido. Para un resultado más suave, grabá a 60fps o
-                      más.
-                    </p>
-                  )}
+                  <p className="fps-note">
+                    Si tu video fue grabado a 30fps, a 0.5x el movimiento puede verse algo entrecortado en vez de un
+                    slow motion fluido. Para un resultado más suave, grabá (o usá) un video a 60fps o más.
+                  </p>
                 </div>
               </div>
             </div>

@@ -419,13 +419,30 @@
   height: 16px;
 }
 
-.recorder__video {
+/* The aspect-ratio lives on this wrapper, not on the <video> itself — a
+   <video> is a replaced element that briefly reports a default/fallback
+   natural size (e.g. 300x150) before its first real decoded frame arrives,
+   and on iOS Safari that made aspect-ratio + object-fit directly on the
+   <video> visibly snap from that fallback shape to the real one once the
+   camera stream's actual frame size showed up. Sizing this box purely from
+   CSS and absolutely positioning the <video> to fill it sidesteps that
+   entirely — the box's size never depends on the video's own natural size. */
+.recorder__video-wrap {
+  position: relative;
   width: 100%;
   max-width: 480px;
   aspect-ratio: 3 / 4;
-  object-fit: cover;
   border-radius: 22px;
   background: #000;
+  overflow: hidden;
+}
+
+.recorder__video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .recorder__timer {
