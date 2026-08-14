@@ -6,7 +6,7 @@ import { BoomerangPreview } from "./components/BoomerangPreview";
 import { BoomerangControls } from "./components/BoomerangControls";
 import { ProcessingOverlay } from "./components/ProcessingOverlay";
 import { ResultView } from "./components/ResultView";
-import { getFFmpeg } from "./lib/ffmpegClient";
+import { getFFmpeg, withFFmpeg, resetFFmpeg } from "./lib/ffmpegClient";
 import { createBoomerang, type Resolution, type Speed, type Mode } from "./lib/boomerang";
 import { extractPreviewClip } from "./lib/previewClip";
 import { probeFrameRate } from "./lib/probeVideo";
@@ -73,9 +73,10 @@ function App() {
 
     // Fire-and-forget: reads the source fps in the background while the
     // person trims, so it's already known by the time they'd reach the
-    // 0.5x speed picker on the adjust screen.
-    getFFmpeg()
-      .then((ffmpeg) => probeFrameRate(ffmpeg, selected))
+    // 0.5x speed picker on the adjust screen. Routed through withFFmpeg so
+    // it can't overlap with the preview-clip extraction or the export
+    // itself — ffmpeg.wasm isn't safe to drive concurrently.
+    withFFmpeg((ffmpeg) => probeFrameRate(ffmpeg, selected))
       .then(setSourceFps)
       .catch(() => {});
   }, []);
@@ -120,23 +121,32 @@ function App() {
     setError(null);
     try {
       setProcessingLabel("Cargando el motor de video…");
-      const ffmpeg = await getFFmpeg();
+      await getFFmpeg();
       setProcessingLabel("Creando tu boomerang…");
-      const blob = await createBoomerang(ffmpeg, file, {
-        start,
-        duration: clampedSegmentDuration,
-        loops,
-        resolution,
-        speed: effectiveSpeed,
-        mode,
-        onProgress: setProgress,
-      });
+      const blob = await withFFmpeg((ffmpeg) =>
+        createBoomerang(ffmpeg, file, {
+          start,
+          duration: clampedSegmentDuration,
+          loops,
+          resolution,
+          speed: effectiveSpeed,
+          mode,
+          onProgress: setProgress,
+        }),
+      );
       setResultBlob(blob);
       setStep("result");
     } catch (err) {
       console.error(err);
       setError("No se pudo procesar el video. Probá con un clip más corto o recargá la página.");
       setStep("adjust");
+    } finally {
+      // Exporting is by far the heaviest thing ffmpeg does here (especially
+      // with chunked reverses at 2K/Original), so its memory footprint is
+      // what eventually trips the "memory access out of bounds" crash after
+      // a few runs. Starting the next export from a freshly-loaded instance
+      // — win or lose — keeps that from ever accumulating that far.
+      resetFFmpeg().catch(() => {});
     }
   }, [file, start, clampedSegmentDuration, loops, resolution, effectiveSpeed, mode]);
 
@@ -145,11 +155,12 @@ function App() {
     setPreparingPreview(true);
     setError(null);
     try {
-      const ffmpeg = await getFFmpeg();
-      const clip = await extractPreviewClip(ffmpeg, file, {
-        start,
-        duration: clampedSegmentDuration,
-      });
+      const clip = await withFFmpeg((ffmpeg) =>
+        extractPreviewClip(ffmpeg, file, {
+          start,
+          duration: clampedSegmentDuration,
+        }),
+      );
       setPreviewClipUrl((prev) => {
         if (prev) URL.revokeObjectURL(prev);
         return URL.createObjectURL(clip);
