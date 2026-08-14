@@ -89,20 +89,6 @@ export async function createBoomerang(
 
   try {
     const scaleFilter = resolution === "original" ? "" : `,scale=-2:${resolution}`;
-    // setpts (below) only rescales the timing of frames that already exist —
-    // it doesn't create new ones. At normal/fast speed that's invisible, but
-    // at 0.5x it means each of the source's frames (shot with a short,
-    // normal-speed shutter) just gets held on screen twice as long, which
-    // reads as a stutter/strobe rather than smooth slow motion — a real
-    // limitation of simple frame-retiming, not a timing bug (a plain fps
-    // resample doesn't fix it, which is why that was tried and didn't help).
-    // minterpolate actually synthesizes in-between frames via motion
-    // estimation first, so there's real new motion data for setpts to
-    // spread out afterward. "blend" is its cheapest mode (still real work,
-    // just not full motion-vector search) — this only kicks in for classic
-    // mode's 0.5x specifically (speed is pinned to 1 for every other mode),
-    // so normal-speed exports stay on the cheap plain resample.
-    const fpsFilter = speed < 1 ? "minterpolate=fps=120:mi_mode=blend," : "fps=60,";
 
     if (mode === "ease") {
       const zoneFiles: string[] = [];
@@ -116,7 +102,7 @@ export async function createBoomerang(
           "-ss", zoneStart.toFixed(3),
           "-t", zoneDuration.toFixed(3),
           "-i", inputName,
-          "-vf", `${fpsFilter}setpts=(PTS-STARTPTS)/${factor}${scaleFilter}`,
+          "-vf", `setpts=(PTS-STARTPTS)/${factor}${scaleFilter}`,
           "-an",
           ...ENCODE_ARGS,
           name,
@@ -140,7 +126,7 @@ export async function createBoomerang(
         "-ss", start.toFixed(3),
         "-t", duration.toFixed(3),
         "-i", inputName,
-        "-vf", `${fpsFilter}setpts=PTS/${speed}${scaleFilter}`,
+        "-vf", `setpts=PTS/${speed}${scaleFilter}`,
         "-an",
         ...ENCODE_ARGS,
         "segment.mp4",

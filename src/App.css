@@ -85,21 +85,6 @@
   text-align: center;
 }
 
-/* Sits directly on the brand gradient (no card behind it), same case as
-   .total-duration — a translucent dark scrim keeps the dim informational
-   text legible everywhere on the gradient. */
-.fps-note {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--text);
-  opacity: 0.9;
-  text-align: center;
-  line-height: 1.5;
-  padding: 10px 16px;
-  border-radius: 12px;
-  background: color-mix(in srgb, #000 45%, transparent);
-}
-
 .app__overlay {
   position: fixed;
   inset: 0;
