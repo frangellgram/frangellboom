@@ -17,6 +17,11 @@ type Step = "upload" | "trim" | "adjust" | "processing" | "result";
 const DEFAULT_SEGMENT = 2;
 const MIN_SEGMENT = 0.5;
 const MAX_SEGMENT = 2;
+// How long the processing overlay fades out before "result" takes over —
+// without this the overlay (a full-screen blurred backdrop + spinner) just
+// vanished the instant the export finished, which read as an abrupt cut
+// even though the result screen itself fades in underneath it.
+const OVERLAY_LEAVE_MS = 280;
 
 function App() {
   const [step, setStep] = useState<Step>("upload");
@@ -38,6 +43,7 @@ function App() {
   // left to trim, so "adjust" needs to know not to offer going back to a
   // trim step that would have nothing meaningful to show.
   const [fileSource, setFileSource] = useState<"upload" | "record">("upload");
+  const [overlayLeaving, setOverlayLeaving] = useState(false);
   const ffmpegPreload = useRef(false);
 
   // Kick off the (large) ffmpeg-core download as soon as the user lands,
@@ -154,6 +160,7 @@ function App() {
     setStep("processing");
     setProgress(0);
     setError(null);
+    setOverlayLeaving(false);
     try {
       setProcessingLabel("Cargando el motor de video…");
       await getFFmpeg();
@@ -170,6 +177,8 @@ function App() {
         }),
       );
       setResultBlob(blob);
+      setOverlayLeaving(true);
+      await new Promise((resolve) => window.setTimeout(resolve, OVERLAY_LEAVE_MS));
       setStep("result");
     } catch (err) {
       console.error(err);
@@ -354,7 +363,7 @@ function App() {
         )}
 
         {step === "processing" && (
-          <div className="app__overlay">
+          <div className={`app__overlay${overlayLeaving ? " app__overlay--leaving" : ""}`}>
             <ProcessingOverlay progress={progress} label={processingLabel} />
           </div>
         )}

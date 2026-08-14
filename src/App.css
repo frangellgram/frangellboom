@@ -121,6 +121,16 @@
   }
 }
 
+/* Toggled on right before swapping to "result" — fades this out instead of
+   it just vanishing the instant the export finishes. Matches
+   OVERLAY_LEAVE_MS in App.tsx, which delays the actual step change by the
+   same amount so this has time to actually play before the element unmounts. */
+.app__overlay--leaving {
+  animation: none;
+  opacity: 0;
+  transition: opacity 0.28s ease;
+}
+
 /* Each step (uploader/trim/adjust/result) is a fresh element whenever React
    swaps to it, so a plain mount animation is enough for a smooth hand-off
    between screens without needing an animation library. */
@@ -147,6 +157,10 @@
   .result,
   .app__overlay {
     animation: none;
+  }
+  .app__overlay--leaving,
+  .result--leaving {
+    transition: none;
   }
 }
 
@@ -1085,6 +1099,15 @@
   flex-direction: column;
   gap: 16px;
   align-items: center;
+}
+
+/* Toggled by ResultView right before "Crear otro" calls onReset — fades
+   this out instead of it cutting straight back to the upload screen. */
+.result--leaving {
+  animation: none;
+  opacity: 0;
+  transform: translateY(-10px) scale(0.98);
+  transition: opacity 0.25s ease, transform 0.25s ease;
 }
 
 .result__headline {

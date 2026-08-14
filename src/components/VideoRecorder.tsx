@@ -82,15 +82,20 @@ export function VideoRecorder({ onCapture, onCancel }: VideoRecorderProps) {
     // testing — still get a stream instead of a hard failure. frameRate is
     // also just "ideal": getUserMedia otherwise falls back to a modest
     // default (e.g. 30fps) far below what the phone's own camera app can
-    // do. Deliberately not requesting a width/height here — pinning an
-    // explicit (landscape-shaped, e.g. 3840x2160) resolution while the
-    // phone is held in portrait made some devices' cameras hunt/renegotiate
-    // lenses mid-preview; leaving it unset lets the browser pick its normal
-    // portrait-appropriate resolution instead.
+    // do. width/height are ideal too, but — unlike the earlier attempt at
+    // this — deliberately portrait-shaped (height > width, matching how the
+    // phone is actually held): asking for a landscape-shaped 3840x2160 while
+    // recording in portrait was what made the camera hunt/renegotiate
+    // lenses mid-preview, *and* without any size hint at all the browser was
+    // falling back to a small, roughly-square default — hence the low
+    // quality and square output. 1080x1920 is the portrait rotation of the
+    // phone's normal 16:9 video shape, at a real resolution.
     navigator.mediaDevices
       .getUserMedia({
         video: {
           facingMode: { ideal: "environment" },
+          width: { ideal: 1080 },
+          height: { ideal: 1920 },
           frameRate: { ideal: 60 },
         },
         audio: false,
@@ -144,7 +149,13 @@ export function VideoRecorder({ onCapture, onCancel }: VideoRecorderProps) {
       }
 
       chunksRef.current = [];
-      const recorder = new MediaRecorder(stream, { mimeType });
+      // Without an explicit bitrate, MediaRecorder's default is much more
+      // aggressive than the phone's native camera encoder, which read as
+      // "low quality" even once the resolution itself was fixed. 12 Mbps is
+      // comfortable for a ~1080x1920@60fps, 2-second clip — file size isn't
+      // a concern here since ffmpeg re-encodes this into the final export
+      // anyway (see boomerang.ts), this file never leaves the device.
+      const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 12_000_000 });
       recorder.ondataavailable = (ev) => {
         if (ev.data.size > 0) chunksRef.current.push(ev.data);
       };
