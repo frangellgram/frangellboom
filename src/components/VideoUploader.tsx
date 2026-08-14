@@ -1,13 +1,23 @@
 import { useCallback, useRef, useState } from "react";
+import { VideoRecorder } from "./VideoRecorder";
 
 interface VideoUploaderProps {
   onSelect: (file: File) => void;
+  onRecord: (file: File) => void;
   error?: string | null;
 }
 
-export function VideoUploader({ onSelect, error }: VideoUploaderProps) {
+// Only show the record option where it can actually work — iOS Safari and
+// most modern mobile browsers, not e.g. an old WebView without MediaRecorder.
+const canRecord =
+  typeof navigator !== "undefined" &&
+  typeof navigator.mediaDevices?.getUserMedia === "function" &&
+  typeof MediaRecorder !== "undefined";
+
+export function VideoUploader({ onSelect, onRecord, error }: VideoUploaderProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
+  const [recording, setRecording] = useState(false);
 
   const handleFiles = useCallback(
     (files: FileList | null) => {
@@ -55,11 +65,29 @@ export function VideoUploader({ onSelect, error }: VideoUploaderProps) {
         </p>
         {error && <p className="uploader__error">{error}</p>}
       </div>
+
+      {canRecord && (
+        <button type="button" className="btn btn--ghost uploader__record-btn" onClick={() => setRecording(true)}>
+          <span className="uploader__record-dot" aria-hidden="true" />
+          Grabar video
+        </button>
+      )}
+
       <div className="uploader__badges">
         <span className="badge">100% en tu dispositivo</span>
         <span className="uploader__badges-dot" aria-hidden="true" />
         <span className="badge">Sin límites de calidad</span>
       </div>
+
+      {recording && (
+        <VideoRecorder
+          onCapture={(file) => {
+            setRecording(false);
+            onRecord(file);
+          }}
+          onCancel={() => setRecording(false)}
+        />
+      )}
     </div>
   );
 }
