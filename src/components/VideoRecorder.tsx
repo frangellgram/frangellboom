@@ -178,7 +178,9 @@ export function VideoRecorder({ onCapture, onCancel }: VideoRecorderProps) {
 
         {(state === "live" || state === "recording") && (
           <>
-            <video ref={attachVideo} className="recorder__video" autoPlay muted playsInline />
+            <div className="recorder__video-wrap">
+              <video ref={attachVideo} className="recorder__video" autoPlay muted playsInline />
+            </div>
             <div className="recorder__timer">
               <div className="recorder__timer-bar">
                 <div className="recorder__timer-fill" style={{ width: `${pct}%` }} />
