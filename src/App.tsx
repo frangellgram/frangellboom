@@ -186,13 +186,6 @@ function App() {
     [mode, effectiveSpeed, clampedSegmentDuration, loops],
   );
 
-  // Fixed note, not tied to a detected fps value or the current speed —
-  // probing the actual source fps turned out unreliable in practice, and
-  // toggling this on/off between 0.5x and 1x just made it flicker as people
-  // compared speeds. It stays visible for the whole "classic" mode instead,
-  // and only disappears once they switch to a different mode entirely.
-  const showFpsNote = mode === "classic";
-
   return (
     <div className="app">
       <header className="app__header">
@@ -297,17 +290,6 @@ function App() {
                   <BoomerangMark className="btn__mark" />
                   Crear boomerang
                 </button>
-              </div>
-
-              <div
-                className={`controls__collapse${showFpsNote ? " controls__collapse--open" : ""}`}
-              >
-                <div className="controls__collapse-inner">
-                  <p className="fps-note">
-                    Si tu video fue grabado a 30fps, a 0.5x el movimiento puede verse algo entrecortado en vez de un
-                    slow motion fluido. Para un resultado más suave, grabá (o usá) un video a 60fps o más.
-                  </p>
-                </div>
               </div>
             </div>
           </div>
