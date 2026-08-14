@@ -284,7 +284,7 @@ function App() {
                 <div className="controls__collapse-inner">
                   {sourceFps !== null && (
                     <p className="fps-note">
-                      Este video se grabó a {Math.round(sourceFps)}fps a 0.5x el movimiento puede verse algo
+                      Este video se grabó a {Math.round(sourceFps)}fps, a 0.5x el movimiento puede verse algo
                       entrecortado en vez de un slow motion fluido. Para un resultado más suave, grabá a 60fps o
                       más.
                     </p>
