@@ -12,6 +12,13 @@ const RECORD_SECONDS = 2;
 // hard-trim down to exactly 2s later.
 const RECORD_MS = RECORD_SECONDS * 1000 + 150;
 
+// How long to keep the "opening camera" spinner over the preview after the
+// stream attaches. The box itself is a fixed size (see .recorder__video-wrap
+// in App.css), but on iOS the camera layer itself visibly opens small and
+// then expands to fill it over the first few hundred ms — this just papers
+// over that with a spinner instead of showing the resize happening live.
+const CAMERA_WARMUP_MS = 700;
+
 // No audio codecs in this list: the rest of the pipeline strips audio with
 // `-an` on every ffmpeg pass anyway, so we never request a microphone track.
 // iOS Safari (14.3+) records straight to H.264 mp4; everything else that
@@ -45,6 +52,7 @@ export function VideoRecorder({ onCapture, onCancel }: VideoRecorderProps) {
   const cancelledRef = useRef(false);
   const [state, setState] = useState<RecorderState>("requesting");
   const [elapsed, setElapsed] = useState(0);
+  const [videoReady, setVideoReady] = useState(false);
 
   const stopStream = useCallback(() => {
     streamRef.current?.getTracks().forEach((t) => t.stop());
@@ -110,6 +118,12 @@ export function VideoRecorder({ onCapture, onCancel }: VideoRecorderProps) {
       if (stopTimerRef.current !== null) window.clearTimeout(stopTimerRef.current);
     };
   }, [stopStream]);
+
+  useEffect(() => {
+    if (state !== "live") return;
+    const t = window.setTimeout(() => setVideoReady(true), CAMERA_WARMUP_MS);
+    return () => window.clearTimeout(t);
+  }, [state]);
 
   const handleRecord = useCallback(
     (e: React.PointerEvent<HTMLButtonElement>) => {
@@ -199,6 +213,11 @@ export function VideoRecorder({ onCapture, onCancel }: VideoRecorderProps) {
           <>
             <div className="recorder__video-wrap">
               <video ref={attachVideo} className="recorder__video" autoPlay muted playsInline />
+              {!videoReady && (
+                <div className="recorder__video-warmup" aria-hidden="true">
+                  <span className="recorder__video-spinner" />
+                </div>
+              )}
             </div>
             <div className="recorder__timer">
               <div className="recorder__timer-bar">
