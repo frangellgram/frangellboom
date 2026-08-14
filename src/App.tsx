@@ -39,10 +39,6 @@ function App() {
   const [resultBlob, setResultBlob] = useState<Blob | null>(null);
   const [previewClipUrl, setPreviewClipUrl] = useState<string | null>(null);
   const [preparingPreview, setPreparingPreview] = useState(false);
-  // Recorded clips are always exactly MAX_SEGMENT already — there's nothing
-  // left to trim, so "adjust" needs to know not to offer going back to a
-  // trim step that would have nothing meaningful to show.
-  const [fileSource, setFileSource] = useState<"upload" | "record">("upload");
   const [overlayLeaving, setOverlayLeaving] = useState(false);
   const ffmpegPreload = useRef(false);
 
@@ -58,7 +54,6 @@ function App() {
 
   const handleSelect = useCallback((selected: File) => {
     setError(null);
-    setFileSource("upload");
     setFile(selected);
     setDuration(0);
     setStart(0);
@@ -72,55 +67,6 @@ function App() {
       return null;
     });
     setStep("trim");
-  }, []);
-
-  // Recorded clips come out of VideoRecorder already at exactly MAX_SEGMENT
-  // (2s) — the max the trim step would ever allow — so there's nothing left
-  // to trim. Skips straight to "adjust" instead of "trim", mirroring
-  // handleSelect (set up state) followed by handleGoToAdjust (build the
-  // scrub preview) in one go.
-  const handleRecorded = useCallback((recorded: File) => {
-    setError(null);
-    setFileSource("record");
-    setFile(recorded);
-    setDuration(MAX_SEGMENT);
-    setStart(0);
-    setSegmentDuration(MAX_SEGMENT);
-    setVideoUrl((prev) => {
-      if (prev) URL.revokeObjectURL(prev);
-      return URL.createObjectURL(recorded);
-    });
-    setPreviewClipUrl((prev) => {
-      if (prev) URL.revokeObjectURL(prev);
-      return null;
-    });
-
-    // Jump to "adjust" immediately instead of waiting on the (ffmpeg-driven)
-    // scrub-preview clip first — that call can take a couple of seconds
-    // (cold-loading the wasm core included), and blocking the transition on
-    // it meant the bare upload screen flashed back into view for that whole
-    // stretch before suddenly jumping to "adjust". BoomerangPreview already
-    // has a graceful fallback for exactly this case (videoUrl ??
-    // previewClipUrl below): it scrubs the freshly recorded file directly
-    // until the nicer preview clip is ready, then swaps over on its own.
-    setStep("adjust");
-
-    setPreparingPreview(true);
-    withFFmpeg((ffmpeg) => extractPreviewClip(ffmpeg, recorded, { start: 0, duration: MAX_SEGMENT }))
-      .then((clip) => {
-        setPreviewClipUrl((prev) => {
-          if (prev) URL.revokeObjectURL(prev);
-          return URL.createObjectURL(clip);
-        });
-      })
-      .catch((err) => {
-        console.error(err);
-        // Non-fatal, same as handleGoToAdjust: BoomerangPreview falls back
-        // to scrubbing the original file directly.
-      })
-      .finally(() => {
-        setPreparingPreview(false);
-      });
   }, []);
 
   const handleReset = useCallback(() => {
@@ -244,7 +190,7 @@ function App() {
       <main className="app__main">
         {step === "upload" && (
           <div className="upload-screen">
-            <VideoUploader onSelect={handleSelect} onRecord={handleRecorded} error={error} />
+            <VideoUploader onSelect={handleSelect} error={error} />
           </div>
         )}
 
@@ -323,20 +269,9 @@ function App() {
               {error && <p className="app__error">{error}</p>}
 
               <div className="editor__actions">
-                {fileSource === "record" ? (
-                  // A recorded clip is always exactly MAX_SEGMENT already —
-                  // there's no trim step to go back to, so this restarts
-                  // from the beginning (pick a file, or record again)
-                  // instead of showing a "2.1s" trim screen with nothing
-                  // real left to trim.
-                  <button type="button" className="btn btn--ghost" onClick={handleReset}>
-                    ← Volver
-                  </button>
-                ) : (
-                  <button type="button" className="btn btn--ghost" onClick={() => setStep("trim")}>
-                    ← Recortar
-                  </button>
-                )}
+                <button type="button" className="btn btn--ghost" onClick={() => setStep("trim")}>
+                  ← Recortar
+                </button>
                 <button
                   type="button"
                   className="btn btn--primary"

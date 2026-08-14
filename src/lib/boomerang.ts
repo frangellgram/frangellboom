@@ -89,6 +89,16 @@ export async function createBoomerang(
 
   try {
     const scaleFilter = resolution === "original" ? "" : `,scale=-2:${resolution}`;
+    // Phone-recorded video (especially 4K60) is very often variable frame
+    // rate — real frame spacing isn't perfectly even, even though the
+    // camera app reports a flat "60fps". setpts below just rescales
+    // whatever PTS values are already on the frames; fed VFR timestamps
+    // directly, that irregularity gets stretched right along with the
+    // speed change and reads as judder, worst at 0.5x where it's most
+    // stretched out. Resampling to a clean, constant 60fps first (a no-op
+    // for genuinely-CFR-60 sources, a harmless frame-duplication for
+    // anything slower) gives setpts an evenly-spaced timeline to work from.
+    const fpsFilter = "fps=60,";
 
     if (mode === "ease") {
       const zoneFiles: string[] = [];
@@ -102,7 +112,7 @@ export async function createBoomerang(
           "-ss", zoneStart.toFixed(3),
           "-t", zoneDuration.toFixed(3),
           "-i", inputName,
-          "-vf", `setpts=(PTS-STARTPTS)/${factor}${scaleFilter}`,
+          "-vf", `${fpsFilter}setpts=(PTS-STARTPTS)/${factor}${scaleFilter}`,
           "-an",
           ...ENCODE_ARGS,
           name,
@@ -126,7 +136,7 @@ export async function createBoomerang(
         "-ss", start.toFixed(3),
         "-t", duration.toFixed(3),
         "-i", inputName,
-        "-vf", `setpts=PTS/${speed}${scaleFilter}`,
+        "-vf", `${fpsFilter}setpts=PTS/${speed}${scaleFilter}`,
         "-an",
         ...ENCODE_ARGS,
         "segment.mp4",
