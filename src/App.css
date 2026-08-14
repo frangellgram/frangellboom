@@ -445,6 +445,28 @@
   object-fit: cover;
 }
 
+/* Covers the video for CAMERA_WARMUP_MS after the stream attaches — on iOS
+   the camera layer itself visibly opens small and expands to fill the box
+   over the first few hundred ms, so this just hides that instead of letting
+   it play out on screen. */
+.recorder__video-warmup {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000;
+}
+
+.recorder__video-spinner {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 3px solid color-mix(in srgb, var(--text) 20%, transparent);
+  border-top-color: var(--accent);
+  animation: spin 0.8s linear infinite;
+}
+
 .recorder__timer {
   display: flex;
   flex-direction: column;
@@ -1131,6 +1153,9 @@
   .processing__spinner-wrap,
   .processing__spinner,
   .processing__bar-fill {
+    animation: none;
+  }
+  .recorder__video-spinner {
     animation: none;
   }
 }
