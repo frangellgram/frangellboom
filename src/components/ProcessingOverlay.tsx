@@ -10,7 +10,7 @@ const FLAVOR_TEXT = [
   "Dándole la vuelta a los píxeles…",
   "Afinando el ida y vuelta…",
   "Puliendo cada cuadro…",
-  "Ya casi vuela 🪃",
+  "Ya casi vuela",
 ];
 
 export function ProcessingOverlay({ progress, label }: ProcessingOverlayProps) {
