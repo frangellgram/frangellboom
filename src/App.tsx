@@ -81,6 +81,50 @@ function App() {
       .catch(() => {});
   }, []);
 
+  // Recorded clips come out of VideoRecorder already at exactly MAX_SEGMENT
+  // (2s) — the max the trim step would ever allow — so there's nothing left
+  // to trim. Skips straight to "adjust" instead of "trim", mirroring
+  // handleSelect (set up state) followed by handleGoToAdjust (build the
+  // scrub preview) in one go.
+  const handleRecorded = useCallback((recorded: File) => {
+    setError(null);
+    setFile(recorded);
+    setDuration(MAX_SEGMENT);
+    setStart(0);
+    setSegmentDuration(MAX_SEGMENT);
+    setSourceFps(null);
+    setVideoUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return URL.createObjectURL(recorded);
+    });
+    setPreviewClipUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
+
+    withFFmpeg((ffmpeg) => probeFrameRate(ffmpeg, recorded))
+      .then(setSourceFps)
+      .catch(() => {});
+
+    setPreparingPreview(true);
+    withFFmpeg((ffmpeg) => extractPreviewClip(ffmpeg, recorded, { start: 0, duration: MAX_SEGMENT }))
+      .then((clip) => {
+        setPreviewClipUrl((prev) => {
+          if (prev) URL.revokeObjectURL(prev);
+          return URL.createObjectURL(clip);
+        });
+      })
+      .catch((err) => {
+        console.error(err);
+        // Non-fatal, same as handleGoToAdjust: BoomerangPreview falls back
+        // to scrubbing the original file directly.
+      })
+      .finally(() => {
+        setPreparingPreview(false);
+        setStep("adjust");
+      });
+  }, []);
+
   const handleReset = useCallback(() => {
     setStep("upload");
     setFile(null);
@@ -196,7 +240,7 @@ function App() {
       <main className="app__main">
         {step === "upload" && (
           <div className="upload-screen">
-            <VideoUploader onSelect={handleSelect} error={error} />
+            <VideoUploader onSelect={handleSelect} onRecord={handleRecorded} error={error} />
           </div>
         )}
 

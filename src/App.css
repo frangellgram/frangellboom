@@ -234,10 +234,16 @@
 }
 
 .uploader-group {
+  /* .upload-screen (the parent) is a flex column with the default
+     align-items: stretch, so without this the group would stretch to the
+     full screen width — align-self: center lets it shrink-wrap to its
+     widest child (the dropzone) instead, which is what .uploader__record-btn
+     below then stretches to match. */
+  align-self: center;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 30px;
+  gap: 14px;
 }
 
 .uploader {
@@ -322,7 +328,7 @@
   flex-wrap: wrap;
   justify-content: center;
   gap: 10px;
-  margin-top: 6px;
+  margin-top: 22px;
   padding: 10px 18px;
   border-radius: 999px;
   background: color-mix(in srgb, #000 35%, transparent);
@@ -348,6 +354,153 @@
   color: var(--accent);
   font-size: 14px;
   font-weight: 600;
+}
+
+/* align-self: stretch (rather than a fixed width) makes this match the
+   dropzone's own width exactly, whatever that ends up being — the dropzone
+   is the widest unstretched child, so it's what sizes .uploader-group. */
+.uploader__record-btn {
+  align-self: stretch;
+}
+
+.uploader__record-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+}
+
+/* ---------- recorder ---------- */
+
+.recorder {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, #000 80%, transparent);
+  backdrop-filter: blur(6px);
+  animation: overlay-in 0.25s ease;
+}
+
+.recorder__panel {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  padding: 24px;
+}
+
+.recorder__close {
+  position: absolute;
+  top: calc(16px + env(safe-area-inset-top));
+  right: 16px;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  background: color-mix(in srgb, #000 55%, transparent);
+  color: var(--text);
+  cursor: pointer;
+  z-index: 1;
+}
+
+.recorder__close-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.recorder__video {
+  width: 100%;
+  max-width: 480px;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+  border-radius: 22px;
+  background: #000;
+}
+
+.recorder__timer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  max-width: 320px;
+}
+
+.recorder__timer-bar {
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+
+.recorder__timer-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  transition: width 0.05s linear;
+}
+
+.recorder__timer-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.recorder__record-btn {
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  border: 4px solid var(--text);
+  background: var(--accent);
+  cursor: pointer;
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.recorder__record-btn:active {
+  transform: scale(0.94);
+}
+
+.recorder__record-btn--active {
+  background: var(--accent);
+  animation: recorder-pulse 1s ease-in-out infinite;
+}
+
+@keyframes recorder-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+.recorder__message {
+  max-width: 34ch;
+  text-align: center;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .recorder,
+  .recorder__record-btn--active {
+    animation: none;
+  }
 }
 
 /* ---------- editor ---------- */
