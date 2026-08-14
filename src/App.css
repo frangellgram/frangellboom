@@ -248,16 +248,10 @@
 }
 
 .uploader-group {
-  /* .upload-screen (the parent) is a flex column with the default
-     align-items: stretch, so without this the group would stretch to the
-     full screen width — align-self: center lets it shrink-wrap to its
-     widest child (the dropzone) instead, which is what .uploader__record-btn
-     below then stretches to match. */
-  align-self: center;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 14px;
+  gap: 30px;
 }
 
 .uploader {
@@ -342,7 +336,7 @@
   flex-wrap: wrap;
   justify-content: center;
   gap: 10px;
-  margin-top: 22px;
+  margin-top: 6px;
   padding: 10px 18px;
   border-radius: 999px;
   background: color-mix(in srgb, #000 35%, transparent);
@@ -368,21 +362,6 @@
   color: var(--accent);
   font-size: 14px;
   font-weight: 600;
-}
-
-/* align-self: stretch (rather than a fixed width) makes this match the
-   dropzone's own width exactly, whatever that ends up being — the dropzone
-   is the widest unstretched child, so it's what sizes .uploader-group. */
-.uploader__record-btn {
-  align-self: stretch;
-}
-
-.uploader__record-dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: var(--accent);
-  flex-shrink: 0;
 }
 
 /* ---------- editor ---------- */

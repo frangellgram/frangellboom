@@ -10,6 +10,7 @@ import { getFFmpeg, withFFmpeg, resetFFmpeg } from "./lib/ffmpegClient";
 import { createBoomerang, type Resolution, type Speed, type Mode } from "./lib/boomerang";
 import { extractPreviewClip } from "./lib/previewClip";
 import { totalBoomerangDuration, deriveLoops } from "./lib/boomerangMath";
+import { requestWakeLock, releaseWakeLock } from "./lib/wakeLock";
 import "./App.css";
 
 type Step = "upload" | "trim" | "adjust" | "processing" | "result";
@@ -51,6 +52,19 @@ function App() {
       /* swallow — a real error will surface again when processing starts */
     });
   }, []);
+
+  // The wake lock is auto-released whenever the tab loses visibility (the
+  // spec requires this) — re-request it if the person switches back while
+  // an export is still running, instead of leaving the screen free to lock
+  // again for the rest of that export.
+  useEffect(() => {
+    if (step !== "processing") return;
+    const onVisible = () => {
+      if (document.visibilityState === "visible") requestWakeLock();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [step]);
 
   const handleSelect = useCallback((selected: File) => {
     setError(null);
@@ -107,6 +121,7 @@ function App() {
     setProgress(0);
     setError(null);
     setOverlayLeaving(false);
+    requestWakeLock();
     try {
       setProcessingLabel("Cargando el motor de video…");
       await getFFmpeg();
@@ -137,6 +152,7 @@ function App() {
       // a few runs. Starting the next export from a freshly-loaded instance
       // — win or lose — keeps that from ever accumulating that far.
       resetFFmpeg().catch(() => {});
+      releaseWakeLock();
     }
   }, [file, start, clampedSegmentDuration, loops, resolution, effectiveSpeed, mode]);
 
