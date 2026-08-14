@@ -1,10 +1,19 @@
 import type { FFmpeg } from "@ffmpeg/ffmpeg";
 import { fetchFile } from "@ffmpeg/util";
-import { EASE_ZONES, type Mode } from "./boomerangMath";
+import { EASE_ZONES, forwardDuration, type Mode } from "./boomerangMath";
 
-export type Resolution = "1080" | "720" | "480";
+export type Resolution = "original" | "1440" | "1080" | "720" | "480";
 export type Speed = 0.5 | 1 | 1.5 | 2;
 export type { Mode };
+
+// Only the two highest tiers are big enough to risk the reverse pass (see
+// below) blowing past iOS Safari's per-tab memory ceiling, so only those
+// get the extra chunking overhead — 1080/720/480 keep the cheaper single-
+// pass reverse they've always used. Value is the chunk length in seconds.
+const REVERSE_CHUNK_SECONDS: Partial<Record<Resolution, number>> = {
+  original: 0.3,
+  "1440": 0.4,
+};
 
 export interface BoomerangOptions {
   start: number;
@@ -34,10 +43,18 @@ export async function createBoomerang(
   const inputName = "input" + extOf(inputFile.name);
   await ffmpeg.writeFile(inputName, await fetchFile(inputFile));
 
+  const chunkSeconds = REVERSE_CHUNK_SECONDS[resolution];
+  const finalSegmentDuration = forwardDuration(mode, speed, duration);
+  const reverseChunkCount = chunkSeconds
+    ? Math.max(1, Math.ceil(finalSegmentDuration / chunkSeconds))
+    : 1;
+  const reverseSteps: StepKind[] =
+    reverseChunkCount > 1 ? [...Array(reverseChunkCount).fill("encode" as StepKind), "copy"] : ["encode"];
+
   const stepKinds: StepKind[] =
     mode === "ease"
-      ? ["encode", "encode", "encode", "copy", "encode", "copy", "copy"]
-      : ["encode", "encode", "copy", "copy"];
+      ? ["encode", "encode", "encode", "copy", ...reverseSteps, "copy", "copy"]
+      : ["encode", ...reverseSteps, "copy", "copy"];
   const weights = progressWeights(stepKinds);
 
   let stepIndex = 0;
@@ -60,11 +77,7 @@ export async function createBoomerang(
   const del = (name: string) => ffmpeg.deleteFile(name).catch(() => {});
 
   try {
-    // The reverse filter below has to buffer every decoded frame in memory
-    // before it can write them out backwards, so downscaling here (before
-    // that pass) also keeps an uncapped 4K phone video from blowing past
-    // iOS Safari's WASM memory budget.
-    const scaleFilter = `,scale=-2:${resolution}`;
+    const scaleFilter = resolution === "original" ? "" : `,scale=-2:${resolution}`;
 
     if (mode === "ease") {
       const zoneFiles: string[] = [];
@@ -81,8 +94,8 @@ export async function createBoomerang(
           "-vf", `setpts=(PTS-STARTPTS)/${factor}${scaleFilter}`,
           "-an",
           "-c:v", "libx264",
-          "-preset", "ultrafast",
-          "-crf", "20",
+          "-preset", "superfast",
+          "-crf", "18",
           "-pix_fmt", "yuv420p",
           name,
         ]);
@@ -107,8 +120,8 @@ export async function createBoomerang(
         "-vf", `setpts=PTS/${speed}${scaleFilter}`,
         "-an",
         "-c:v", "libx264",
-        "-preset", "ultrafast",
-        "-crf", "20",
+        "-preset", "superfast",
+        "-crf", "18",
         "-pix_fmt", "yuv420p",
         "segment.mp4",
       ]);
@@ -119,17 +132,61 @@ export async function createBoomerang(
     // Build the reversed copy of that same (already speed-adjusted) segment.
     // Codec settings must be explicit here too — without them ffmpeg falls
     // back to a much slower default preset for this pass.
-    await ffmpeg.exec([
-      "-i", "segment.mp4",
-      "-vf", "reverse",
-      "-an",
-      "-c:v", "libx264",
-      "-preset", "ultrafast",
-      "-crf", "20",
-      "-pix_fmt", "yuv420p",
-      "reversed.mp4",
-    ]);
-    advance();
+    //
+    // The `reverse` filter has to hold every decoded frame in memory before
+    // it can write them out backwards. At native/2K resolution that's
+    // enough raw frame data to blow past iOS Safari's per-tab memory
+    // ceiling — the OS kills the tab outright when that happens, so there's
+    // no error to catch, it just reloads. Splitting the segment into small
+    // chunks, reversing each chunk on its own, then splicing the chunks
+    // back together in *reverse chunk order* produces the exact same frame
+    // order as reversing the whole thing at once (same idea as reversing a
+    // deck of cards a few at a time), but peak memory only ever has to hold
+    // one chunk instead of the whole segment.
+    if (reverseChunkCount > 1) {
+      const chunkFiles: string[] = [];
+      for (let i = 0; i < reverseChunkCount; i++) {
+        const chunkStart = i * chunkSeconds!;
+        const chunkLength = Math.min(chunkSeconds!, finalSegmentDuration - chunkStart);
+        const name = `rchunk${i}.mp4`;
+        await ffmpeg.exec([
+          "-ss", chunkStart.toFixed(3),
+          "-t", chunkLength.toFixed(3),
+          "-i", "segment.mp4",
+          "-vf", "reverse",
+          "-an",
+          "-c:v", "libx264",
+          "-preset", "superfast",
+          "-crf", "18",
+          "-pix_fmt", "yuv420p",
+          name,
+        ]);
+        advance();
+        chunkFiles.push(name);
+        cleanupFiles.push(name);
+      }
+      cleanupFiles.push("reverse-chunks.txt");
+      await ffmpeg.writeFile(
+        "reverse-chunks.txt",
+        [...chunkFiles].reverse().map((f) => `file '${f}'`).join("\n") + "\n",
+      );
+      await ffmpeg.exec(["-f", "concat", "-safe", "0", "-i", "reverse-chunks.txt", "-c", "copy", "reversed.mp4"]);
+      advance();
+      await del("reverse-chunks.txt");
+      for (const f of chunkFiles) await del(f);
+    } else {
+      await ffmpeg.exec([
+        "-i", "segment.mp4",
+        "-vf", "reverse",
+        "-an",
+        "-c:v", "libx264",
+        "-preset", "superfast",
+        "-crf", "18",
+        "-pix_fmt", "yuv420p",
+        "reversed.mp4",
+      ]);
+      advance();
+    }
 
     // Glue forward + reverse into a single ping-pong cycle.
     await ffmpeg.writeFile("concat.txt", "file 'segment.mp4'\nfile 'reversed.mp4'\n");

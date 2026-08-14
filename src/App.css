@@ -218,6 +218,13 @@
   flex: 1.2;
 }
 
+.uploader-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 30px;
+}
+
 .uploader {
   display: flex;
   flex-direction: column;
@@ -280,28 +287,45 @@
   font-weight: 800;
 }
 
+/* The uploader card has no background fill, so this hint sits directly on
+   the brand gradient. A larger, near-full-opacity weight plus a stacked
+   text-shadow (tight + wide) keeps it legible without boxing it in a scrim,
+   which read oddly next to the badge pills below. */
 .uploader__hint {
-  color: var(--text-dim);
-  font-size: 14px;
-  max-width: 32ch;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+  color: var(--text);
+  opacity: 0.85;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.4;
+  max-width: 30ch;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.55), 0 2px 14px rgba(0, 0, 0, 0.35);
 }
 
 .uploader__badges {
   display: flex;
+  align-items: center;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 8px;
-  margin-top: 4px;
+  gap: 10px;
+  margin-top: 6px;
+  padding: 10px 18px;
+  border-radius: 999px;
+  background: color-mix(in srgb, #000 35%, transparent);
+}
+
+.uploader__badges-dot {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  opacity: 0.7;
 }
 
 .badge {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
-  padding: 6px 12px;
-  border-radius: 999px;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   color: var(--text-dim);
 }
 
@@ -313,11 +337,8 @@
 
 /* ---------- editor ---------- */
 
-/* Nudges the trim step down from the top edge, same reasoning as
-   upload-screen — only a partial push (not full centering), so the
-   "Siguiente" button doesn't end up crowded toward the bottom edge. The
-   spacer shrinks first on short viewports instead of pushing content
-   out of view. */
+/* Same unequal-spacer centering as upload-screen, so the trim card lands
+   mid-screen like the uploader instead of hugging the top. */
 .trim-screen {
   flex: 1;
   min-height: 0;
@@ -327,7 +348,13 @@
 
 .trim-screen::before {
   content: "";
-  flex: 0.15;
+  flex: 0.8;
+  min-height: 0;
+}
+
+.trim-screen::after {
+  content: "";
+  flex: 1.2;
   min-height: 0;
 }
 
@@ -427,19 +454,22 @@
 .trimmer__labels {
   display: flex;
   justify-content: space-between;
-  font-size: 12px;
-  color: var(--text-dim);
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text);
 }
 
-/* This row sits directly on the brand gradient (no card behind it), and a
-   text-shadow alone isn't enough once the gradient reaches its brighter
-   orange/gold stops — a translucent dark scrim (same idiom as
-   .preview__live-badge) keeps it legible at every position. */
+/* This row sits directly on the brand gradient (no card behind it), and
+   --text-dim at low weight wasn't enough once the gradient reaches its
+   brighter orange/gold stops — same fix as the uploader badges: a
+   near-opaque dark scrim plus full-brightness text keeps it legible
+   everywhere instead of just riding on text-shadow. */
 .trimmer__labels span {
-  padding: 2px 7px;
+  padding: 4px 10px;
   border-radius: 999px;
-  background: color-mix(in srgb, #000 40%, transparent);
+  background: color-mix(in srgb, #000 55%, transparent);
 }
 
 /* ---------- live preview ---------- */

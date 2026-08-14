@@ -199,7 +199,7 @@ function App() {
               <div className="controls controls--single">
                 <div className="controls__row">
                   <label className="controls__label" htmlFor="segment-duration">
-                    <span>✂️ Duración del tramo</span>
+                    <span>Duración del video para boomerang</span>
                     <span className="controls__value">{clampedSegmentDuration.toFixed(1)}s</span>
                   </label>
                   <input
@@ -216,7 +216,7 @@ function App() {
 
               <div className="editor__actions">
                 <button type="button" className="btn btn--ghost" onClick={handleReset}>
-                  Cambiar video
+                  Volver atrás
                 </button>
                 <button
                   type="button"
