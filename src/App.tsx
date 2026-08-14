@@ -209,11 +209,12 @@ function App() {
     [mode, effectiveSpeed, clampedSegmentDuration, loops],
   );
 
-  // Fixed note, not tied to a detected fps value — probing the actual
-  // source fps turned out unreliable in practice, so instead of trying to
-  // detect and report a (possibly wrong) number, this just always surfaces
-  // the general caveat whenever 0.5x is selected.
-  const showFpsNote = mode === "classic" && effectiveSpeed === 0.5;
+  // Fixed note, not tied to a detected fps value or the current speed —
+  // probing the actual source fps turned out unreliable in practice, and
+  // toggling this on/off between 0.5x and 1x just made it flicker as people
+  // compared speeds. It stays visible for the whole "classic" mode instead,
+  // and only disappears once they switch to a different mode entirely.
+  const showFpsNote = mode === "classic";
 
   return (
     <div className="app">
