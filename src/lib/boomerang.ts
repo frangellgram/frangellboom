@@ -32,6 +32,21 @@ const FRAME_DURATION = 1 / OUTPUT_FPS;
 // zoom rather than something that needs extra source detail held in memory.
 const ZOOM_FACTOR = 1.15;
 
+// mediabunny's built-in `Quality('very-high')` sizes its bitrate purely off
+// resolution, with no awareness of framerate. We always encode at a fixed
+// OUTPUT_FPS (60), so a preset calibrated for a lower assumed fps ends up
+// splitting the same bit budget across twice as many frames — every frame
+// gets less data than it needs, which reads as blur rather than an outright
+// error. Computing bitrate ourselves from actual output pixels *and* actual
+// output fps (a plain bits-per-pixel-per-frame target, tuned to look
+// comparable to the old ffmpeg pipeline's crf 16) keeps quality consistent
+// regardless of how fast we're encoding.
+const BITS_PER_PIXEL_PER_FRAME = 0.12;
+
+function targetBitrate(width: number, height: number): number {
+  return Math.round(width * height * OUTPUT_FPS * BITS_PER_PIXEL_PER_FRAME);
+}
+
 const RESOLUTION_HEIGHTS: Partial<Record<Resolution, number>> = {
   "1440": 1440,
   "1080": 1080,
@@ -128,7 +143,10 @@ export async function createBoomerang(
     }
 
     const output = new Output({ format: new Mp4OutputFormat(), target: new BufferTarget() });
-    const videoSource = new VideoSampleSource({ codec: "avc", quality: new Quality("very-high") });
+    const videoSource = new VideoSampleSource({
+      codec: "avc",
+      quality: new Quality({ bitrate: targetBitrate(outWidth, outHeight) }),
+    });
     output.addVideoTrack(videoSource);
     await output.start();
 
