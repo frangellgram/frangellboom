@@ -47,7 +47,7 @@ const ZOOM_FACTOR = 1.15;
 // whatever bitrate it's asked for — asking for more is the direct lever
 // available from the JS side. File size and encode time both grow with
 // this; for a several-second clip that trade is worth it for real sharpness.
-const BITS_PER_PIXEL_PER_FRAME = 0.6;
+const BITS_PER_PIXEL_PER_FRAME = 2;
 
 function targetBitrate(width: number, height: number): number {
   return Math.round(width * height * OUTPUT_FPS * BITS_PER_PIXEL_PER_FRAME);
@@ -59,7 +59,7 @@ function targetBitrate(width: number, height: number): number {
 // encoder actually honors (its bitrate handling is the documented unreliable
 // one), the quantizer is a second, more hardware-native lever pointed at the
 // same "encode this sharp" goal.
-const QUANTIZER = 10;
+const QUANTIZER = 0;
 
 const RESOLUTION_HEIGHTS: Partial<Record<Resolution, number>> = {
   "1440": 1440,
