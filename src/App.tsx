@@ -6,7 +6,7 @@ import { BoomerangPreview } from "./components/BoomerangPreview";
 import { BoomerangControls } from "./components/BoomerangControls";
 import { ProcessingOverlay } from "./components/ProcessingOverlay";
 import { ResultView } from "./components/ResultView";
-import { getFFmpeg, withFFmpeg } from "./lib/ffmpegClient";
+import { getFFmpeg, withFFmpeg, resetFFmpeg } from "./lib/ffmpegClient";
 import { createBoomerang, type Resolution, type Speed, type Mode } from "./lib/boomerang";
 import { createBoomerangFfmpeg } from "./lib/boomerangFfmpeg";
 import { extractPreviewClip } from "./lib/previewClip";
@@ -139,6 +139,13 @@ function App() {
           mode,
           onProgress: setProgress,
         };
+        // ffmpeg.wasm's linear memory only ever grows, never shrinks — a
+        // heavy preview-clip extraction or a prior export can leave enough
+        // of it behind that a later "original"/4K FFmpeg export trips a
+        // fatal WASM error partway through. Starting this engine from a
+        // freshly-loaded instance guarantees it isn't inheriting anyone
+        // else's leftover memory.
+        if (engine === "ffmpeg") await resetFFmpeg();
         const blob =
           engine === "mp4"
             ? await createBoomerang(file, options)
@@ -152,6 +159,7 @@ function App() {
         setError("No se pudo procesar el video. Probá con un clip más corto o recargá la página.");
         setStep("adjust");
       } finally {
+        if (engine === "ffmpeg") await resetFFmpeg().catch(() => {});
         releaseWakeLock();
       }
     },
