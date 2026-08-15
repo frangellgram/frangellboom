@@ -6,7 +6,7 @@ import { BoomerangPreview } from "./components/BoomerangPreview";
 import { BoomerangControls } from "./components/BoomerangControls";
 import { ProcessingOverlay } from "./components/ProcessingOverlay";
 import { ResultView } from "./components/ResultView";
-import { getFFmpeg, withFFmpeg, resetFFmpeg } from "./lib/ffmpegClient";
+import { getFFmpeg, withFFmpeg } from "./lib/ffmpegClient";
 import { createBoomerang, type Resolution, type Speed, type Mode } from "./lib/boomerang";
 import { extractPreviewClip } from "./lib/previewClip";
 import { totalBoomerangDuration, deriveLoops } from "./lib/boomerangMath";
@@ -123,20 +123,16 @@ function App() {
     setOverlayLeaving(false);
     requestWakeLock();
     try {
-      setProcessingLabel("Cargando el motor de video…");
-      await getFFmpeg();
       setProcessingLabel("Creando tu boomerang…");
-      const blob = await withFFmpeg((ffmpeg) =>
-        createBoomerang(ffmpeg, file, {
-          start,
-          duration: clampedSegmentDuration,
-          loops,
-          resolution,
-          speed: effectiveSpeed,
-          mode,
-          onProgress: setProgress,
-        }),
-      );
+      const blob = await createBoomerang(file, {
+        start,
+        duration: clampedSegmentDuration,
+        loops,
+        resolution,
+        speed: effectiveSpeed,
+        mode,
+        onProgress: setProgress,
+      });
       setResultBlob(blob);
       setOverlayLeaving(true);
       await new Promise((resolve) => window.setTimeout(resolve, OVERLAY_LEAVE_MS));
@@ -146,12 +142,6 @@ function App() {
       setError("No se pudo procesar el video. Probá con un clip más corto o recargá la página.");
       setStep("adjust");
     } finally {
-      // Exporting is by far the heaviest thing ffmpeg does here (especially
-      // with chunked reverses at 2K/Original), so its memory footprint is
-      // what eventually trips the "memory access out of bounds" crash after
-      // a few runs. Starting the next export from a freshly-loaded instance
-      // — win or lose — keeps that from ever accumulating that far.
-      resetFFmpeg().catch(() => {});
       releaseWakeLock();
     }
   }, [file, start, clampedSegmentDuration, loops, resolution, effectiveSpeed, mode]);
