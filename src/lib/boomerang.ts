@@ -42,11 +42,24 @@ const ZOOM_FACTOR = 1.15;
 // output fps (a plain bits-per-pixel-per-frame target, tuned to look
 // comparable to the old ffmpeg pipeline's crf 16) keeps quality consistent
 // regardless of how fast we're encoding.
-const BITS_PER_PIXEL_PER_FRAME = 0.12;
+// Pushed well past a normal "high quality" target (~0.12) specifically to
+// compensate for Safari's documented habit of under-delivering relative to
+// whatever bitrate it's asked for — asking for more is the direct lever
+// available from the JS side. File size and encode time both grow with
+// this; for a several-second clip that trade is worth it for real sharpness.
+const BITS_PER_PIXEL_PER_FRAME = 0.35;
 
 function targetBitrate(width: number, height: number): number {
   return Math.round(width * height * OUTPUT_FPS * BITS_PER_PIXEL_PER_FRAME);
 }
+
+// Explicit low quantizer (== ffmpeg's old crf 16) passed alongside the
+// bitrate above, not instead of it. WebCodecs lets an encoder be given both
+// a target bitrate *and* a per-frame quantizer hint — whichever one Safari's
+// encoder actually honors (its bitrate handling is the documented unreliable
+// one), the quantizer is a second, more hardware-native lever pointed at the
+// same "encode this sharp" goal.
+const QUANTIZER = 16;
 
 const RESOLUTION_HEIGHTS: Partial<Record<Resolution, number>> = {
   "1440": 1440,
@@ -161,7 +174,7 @@ export async function createBoomerang(
     // codec Apple's own hardware is built around, so it's worth trying as
     // the primary target — with AVC as a fallback for browsers (notably
     // Android Chrome) that don't ship an HEVC *encoder* at all.
-    const quality = new Quality({ bitrate: targetBitrate(outWidth, outHeight) });
+    const quality = new Quality({ bitrate: targetBitrate(outWidth, outHeight), quantizer: QUANTIZER });
     const codec = (await canEncodeVideo("hevc", { width: outWidth, height: outHeight, quality })) ? "hevc" : "avc";
 
     const output = new Output({ format: new Mp4OutputFormat(), target: new BufferTarget() });
