@@ -129,7 +129,18 @@ export async function createBoomerang(
     // second decode pass or a real `reverse` filter — and it's also why
     // memory stays bounded: we never hold more than one full-resolution
     // frame at a time, only the (much cheaper) already-scaled bitmaps.
-    const sink = new VideoSampleSink(track);
+    // `prefer-software` steers WebCodecs away from the platform's hardware
+    // codec block (Apple's VideoToolbox on iOS/macOS) and onto a real
+    // software codec implementation instead. Hardware blocks are built for
+    // fast, "good enough" throughput (camera apps, video calls), not for
+    // honoring an exact requested bitrate — that mismatch is almost
+    // certainly why 2K came out blurry even with a generous bitrate above.
+    // Software decode/encode is slower, but here that's the right trade:
+    // a boomerang export finishing in a few extra seconds beats one that
+    // finishes fast but looks bad, or one whose hardware path is hitting
+    // whatever internal limit is crashing 4K outright.
+    const codecPreference = { hardwareAcceleration: "prefer-software" as const };
+    const sink = new VideoSampleSink(track, codecPreference);
     const scratch = new OffscreenCanvas(outWidth, outHeight);
     const scratchCtx = scratch.getContext("2d")!;
     for await (const sample of sink.samples(start, start + duration)) {
@@ -146,6 +157,7 @@ export async function createBoomerang(
     const videoSource = new VideoSampleSource({
       codec: "avc",
       quality: new Quality({ bitrate: targetBitrate(outWidth, outHeight) }),
+      ...codecPreference,
     });
     output.addVideoTrack(videoSource);
     await output.start();
