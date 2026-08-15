@@ -21,6 +21,20 @@ const ZOOM_FILTER = `scale=iw*${ZOOM_FACTOR}:ih*${ZOOM_FACTOR},crop=iw/${ZOOM_FA
 
 const ENCODE_ARGS = ["-c:v", "libx264", "-preset", "superfast", "-crf", "16", "-pix_fmt", "yuv420p"];
 
+// `setpts` alone only stretches existing frames' timestamps — it never
+// generates new ones. So any zone/speed slower than 1x ends up playing back
+// at less than the source's real framerate (a 60fps source at 0.5x becomes
+// an effective 30fps), which reads as choppy on fast-moving backgrounds
+// even though the file itself is perfectly valid. `minterpolate` fills in
+// real synthesized frames to compensate. `mi_mode=blend` (a cheap crossfade)
+// rather than motion-compensated interpolation, since this has to run on
+// ffmpeg.wasm with no hardware acceleration — including on mobile CPUs.
+// Placed after the scale filter so it interpolates the smaller, already-
+// downscaled frames rather than full-resolution ones.
+function interpolateFilter(factor: number): string {
+  return factor < 1 ? ",minterpolate=fps=60:mi_mode=blend" : "";
+}
+
 export interface BoomerangOptions {
   start: number;
   duration: number;
@@ -102,7 +116,7 @@ export async function createBoomerang(
           "-ss", zoneStart.toFixed(3),
           "-t", zoneDuration.toFixed(3),
           "-i", inputName,
-          "-vf", `setpts=(PTS-STARTPTS)/${factor}${scaleFilter}`,
+          "-vf", `setpts=(PTS-STARTPTS)/${factor}${scaleFilter}${interpolateFilter(factor)}`,
           "-an",
           ...ENCODE_ARGS,
           name,
@@ -126,7 +140,7 @@ export async function createBoomerang(
         "-ss", start.toFixed(3),
         "-t", duration.toFixed(3),
         "-i", inputName,
-        "-vf", `setpts=PTS/${speed}${scaleFilter}`,
+        "-vf", `setpts=PTS/${speed}${scaleFilter}${interpolateFilter(speed)}`,
         "-an",
         ...ENCODE_ARGS,
         "segment.mp4",
