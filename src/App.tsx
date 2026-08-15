@@ -33,7 +33,7 @@ function App() {
   const [segmentDuration, setSegmentDuration] = useState(DEFAULT_SEGMENT);
   const [speed, setSpeed] = useState<Speed>(1);
   const [mode, setMode] = useState<Mode>("classic");
-  const [resolution, setResolution] = useState<Resolution>("original");
+  const [resolution, setResolution] = useState<Resolution>("1440");
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
   const [processingLabel, setProcessingLabel] = useState("Preparando…");

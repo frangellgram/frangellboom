@@ -28,8 +28,13 @@ const SPEED_OPTIONS: { value: Speed; label: string }[] = [
   { value: 1, label: "1×" },
 ];
 
+// "original" is temporarily pulled from the picker — at native/4K+ source
+// resolution the export pipeline buffers every decoded frame of the trimmed
+// segment in memory before encoding, which blows well past iOS Safari's
+// per-tab memory ceiling and crashes the whole page instead of failing
+// gracefully. Re-add once that buffering is reworked to not need the full
+// resolution held in memory at once.
 const RESOLUTION_OPTIONS: { value: Resolution; label: string }[] = [
-  { value: "original", label: "Original" },
   { value: "1440", label: "2K" },
   { value: "1080", label: "1080p" },
   { value: "720", label: "720p" },
