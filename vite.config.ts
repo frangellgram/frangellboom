@@ -37,6 +37,13 @@ export default defineConfig({
     }),
     VitePWA({
       registerType: "autoUpdate",
+      // Registered manually in main.tsx instead (with a periodic update
+      // check) — the default injected script only ever checks for a new
+      // service worker on a cold page load, which an installed PWA opened
+      // from its home-screen icon almost never does. Without polling, a
+      // phone can stay pinned to a stale cached build indefinitely even
+      // while every other client is already on the latest code.
+      injectRegister: false,
       includeAssets: ["favicon.svg", "apple-touch-icon.png"],
       manifest: {
         name: "frangellboom",
