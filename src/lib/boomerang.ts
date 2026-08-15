@@ -2,6 +2,7 @@ import {
   ALL_FORMATS,
   BlobSource,
   BufferTarget,
+  canEncodeVideo,
   Input,
   Mp4OutputFormat,
   Output,
@@ -153,12 +154,18 @@ export async function createBoomerang(
       throw new Error("El tramo elegido no tiene frames de video.");
     }
 
+    // Safari's WebCodecs H.264 encoder has a known, documented bug where it
+    // silently ignores the requested bitrate (w3c/webcodecs#430) — no matter
+    // how generous a number we compute, it can still encode low-quality.
+    // HEVC is ~40% more bit-efficient than AVC to begin with, and is the
+    // codec Apple's own hardware is built around, so it's worth trying as
+    // the primary target — with AVC as a fallback for browsers (notably
+    // Android Chrome) that don't ship an HEVC *encoder* at all.
+    const quality = new Quality({ bitrate: targetBitrate(outWidth, outHeight) });
+    const codec = (await canEncodeVideo("hevc", { width: outWidth, height: outHeight, quality })) ? "hevc" : "avc";
+
     const output = new Output({ format: new Mp4OutputFormat(), target: new BufferTarget() });
-    const videoSource = new VideoSampleSource({
-      codec: "avc",
-      quality: new Quality({ bitrate: targetBitrate(outWidth, outHeight) }),
-      ...codecPreference,
-    });
+    const videoSource = new VideoSampleSource({ codec, quality, ...codecPreference });
     output.addVideoTrack(videoSource);
     await output.start();
 
