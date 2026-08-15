@@ -8,6 +8,7 @@ import { ProcessingOverlay } from "./components/ProcessingOverlay";
 import { ResultView } from "./components/ResultView";
 import { getFFmpeg, withFFmpeg } from "./lib/ffmpegClient";
 import { createBoomerang, type Resolution, type Speed, type Mode } from "./lib/boomerang";
+import { createBoomerangFfmpeg } from "./lib/boomerangFfmpeg";
 import { extractPreviewClip } from "./lib/previewClip";
 import { totalBoomerangDuration, deriveLoops } from "./lib/boomerangMath";
 import { requestWakeLock, releaseWakeLock } from "./lib/wakeLock";
@@ -115,36 +116,47 @@ function App() {
     [mode, effectiveSpeed, clampedSegmentDuration],
   );
 
-  const handleCreate = useCallback(async () => {
-    if (!file) return;
-    setStep("processing");
-    setProgress(0);
-    setError(null);
-    setOverlayLeaving(false);
-    requestWakeLock();
-    try {
-      setProcessingLabel("Creando tu boomerang…");
-      const blob = await createBoomerang(file, {
-        start,
-        duration: clampedSegmentDuration,
-        loops,
-        resolution,
-        speed: effectiveSpeed,
-        mode,
-        onProgress: setProgress,
-      });
-      setResultBlob(blob);
-      setOverlayLeaving(true);
-      await new Promise((resolve) => window.setTimeout(resolve, OVERLAY_LEAVE_MS));
-      setStep("result");
-    } catch (err) {
-      console.error(err);
-      setError("No se pudo procesar el video. Probá con un clip más corto o recargá la página.");
-      setStep("adjust");
-    } finally {
-      releaseWakeLock();
-    }
-  }, [file, start, clampedSegmentDuration, loops, resolution, effectiveSpeed, mode]);
+  // Two export engines running side by side (temporary, for comparing
+  // quality): the newer WebCodecs/mediabunny pipeline in boomerang.ts, and
+  // the original ffmpeg.wasm one in boomerangFfmpeg.ts. Same options shape,
+  // same output contract, so both buttons share this one runner.
+  const runExport = useCallback(
+    async (engine: "mp4" | "ffmpeg") => {
+      if (!file) return;
+      setStep("processing");
+      setProgress(0);
+      setError(null);
+      setOverlayLeaving(false);
+      requestWakeLock();
+      try {
+        setProcessingLabel(engine === "mp4" ? "Creando tu boomerang (MP4)…" : "Creando tu boomerang (FFmpeg)…");
+        const options = {
+          start,
+          duration: clampedSegmentDuration,
+          loops,
+          resolution,
+          speed: effectiveSpeed,
+          mode,
+          onProgress: setProgress,
+        };
+        const blob =
+          engine === "mp4"
+            ? await createBoomerang(file, options)
+            : await withFFmpeg((ffmpeg) => createBoomerangFfmpeg(ffmpeg, file, options));
+        setResultBlob(blob);
+        setOverlayLeaving(true);
+        await new Promise((resolve) => window.setTimeout(resolve, OVERLAY_LEAVE_MS));
+        setStep("result");
+      } catch (err) {
+        console.error(err);
+        setError("No se pudo procesar el video. Probá con un clip más corto o recargá la página.");
+        setStep("adjust");
+      } finally {
+        releaseWakeLock();
+      }
+    },
+    [file, start, clampedSegmentDuration, loops, resolution, effectiveSpeed, mode],
+  );
 
   const handleGoToAdjust = useCallback(async () => {
     if (!file) return;
@@ -274,11 +286,20 @@ function App() {
                 <button
                   type="button"
                   className="btn btn--primary"
-                  onClick={handleCreate}
+                  onClick={() => runExport("mp4")}
                   disabled={step === "processing"}
                 >
                   <BoomerangMark className="btn__mark" />
-                  Crear boomerang
+                  Crear (MP4)
+                </button>
+                <button
+                  type="button"
+                  className="btn btn--primary"
+                  onClick={() => runExport("ffmpeg")}
+                  disabled={step === "processing"}
+                >
+                  <BoomerangMark className="btn__mark" />
+                  Crear (FFmpeg, crf 14)
                 </button>
               </div>
             </div>
