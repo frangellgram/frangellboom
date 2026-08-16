@@ -1,83 +1,38 @@
-import {
-  ALL_FORMATS,
-  BlobSource,
-  BufferTarget,
-  canEncodeVideo,
-  Input,
-  Mp4OutputFormat,
-  Output,
-  Quality,
-  VideoSample,
-  VideoSampleSink,
-  VideoSampleSource,
-} from "mediabunny";
-import { legsFor, totalBoomerangDuration, zoneFactorAt, zoomLegIndex, type Mode } from "./boomerangMath";
+import type { FFmpeg } from "@ffmpeg/ffmpeg";
+import { fetchFile } from "@ffmpeg/util";
+import { EASE_ZONES, FREEZE_HOLD_SECONDS, PULSE_PULLBACK, forwardDuration, type Mode } from "./boomerangMath";
 
 export type Resolution = "original" | "1440" | "1080" | "720" | "480";
 export type Speed = 0.5 | 1 | 1.5 | 2;
 export type { Mode };
 
-// Output is always encoded at a fixed 60fps regardless of the source's own
-// framerate. Two reasons: it gives slow-motion zones (factor < 1, see
-// `wantsBlend` below) enough frame slots to actually receive the blended
-// in-between frames instead of just duplicating source frames — and 60fps
-// divides evenly (or close to it) into the 60/90/120Hz refresh rates modern
-// phone screens actually use, where a plain 30fps file can visibly judder
-// even though the file itself is perfectly valid.
-const OUTPUT_FPS = 60;
-const FRAME_DURATION = 1 / OUTPUT_FPS;
-
-// "zoom" mode's constant punch-in, applied only to the leg `zoomLegIndex`
-// points at. Matches how the previous ffmpeg pipeline did it: scale up then
-// crop back down to the same output size, so it's a same-resolution digital
-// zoom rather than something that needs extra source detail held in memory.
-const ZOOM_FACTOR = 1.15;
-
-// mediabunny's built-in `Quality('very-high')` sizes its bitrate purely off
-// resolution, with no awareness of framerate. We always encode at a fixed
-// OUTPUT_FPS (60), so a preset calibrated for a lower assumed fps ends up
-// splitting the same bit budget across twice as many frames — every frame
-// gets less data than it needs, which reads as blur rather than an outright
-// error. Computing bitrate ourselves from actual output pixels *and* actual
-// output fps (a plain bits-per-pixel-per-frame target, tuned to look
-// comparable to the old ffmpeg pipeline's crf 16) keeps quality consistent
-// regardless of how fast we're encoding.
-// Pushed well past a normal "high quality" target (~0.12) specifically to
-// compensate for Safari's documented habit of under-delivering relative to
-// whatever bitrate it's asked for — asking for more is the direct lever
-// available from the JS side. File size and encode time both grow with
-// this; for a several-second clip that trade is worth it for real sharpness.
-const BITS_PER_PIXEL_PER_FRAME = 2;
-
-function targetBitrate(width: number, height: number): number {
-  return Math.round(width * height * OUTPUT_FPS * BITS_PER_PIXEL_PER_FRAME);
-}
-
-// Explicit low quantizer (== ffmpeg's old crf 16) passed alongside the
-// bitrate above, not instead of it. WebCodecs lets an encoder be given both
-// a target bitrate *and* a per-frame quantizer hint — whichever one Safari's
-// encoder actually honors (its bitrate handling is the documented unreliable
-// one), the quantizer is a second, more hardware-native lever pointed at the
-// same "encode this sharp" goal.
-const QUANTIZER = 0;
-
-const RESOLUTION_HEIGHTS: Partial<Record<Resolution, number>> = {
-  "1440": 1440,
-  "1080": 1080,
-  "720": 720,
-  "480": 480,
+// Only the two highest tiers are big enough to risk the reverse pass (see
+// below) blowing past iOS Safari's per-tab memory ceiling, so only those
+// get the extra chunking overhead — 1080/720/480 keep the cheaper single-
+// pass reverse they've always used. Value is the chunk length in seconds.
+const REVERSE_CHUNK_SECONDS: Partial<Record<Resolution, number>> = {
+  original: 0.3,
+  "1440": 0.4,
 };
 
-function evenize(n: number): number {
-  const r = Math.round(n);
-  return r % 2 === 0 ? r : r - 1;
-}
+// "zoom" mode's constant punch-in applied to the whole reverse pass.
+const ZOOM_FACTOR = 1.15;
+const ZOOM_FILTER = `scale=iw*${ZOOM_FACTOR}:ih*${ZOOM_FACTOR},crop=iw/${ZOOM_FACTOR}:ih/${ZOOM_FACTOR}`;
 
-function targetDimensions(resolution: Resolution, srcWidth: number, srcHeight: number) {
-  const targetHeight = RESOLUTION_HEIGHTS[resolution];
-  if (!targetHeight) return { width: evenize(srcWidth), height: evenize(srcHeight) };
-  const targetWidth = Math.round(srcWidth * (targetHeight / srcHeight));
-  return { width: evenize(targetWidth), height: evenize(targetHeight) };
+const ENCODE_ARGS = ["-c:v", "libx264", "-preset", "superfast", "-crf", "14", "-pix_fmt", "yuv420p"];
+
+// `setpts` alone only stretches existing frames' timestamps — it never
+// generates new ones. So any zone/speed slower than 1x ends up playing back
+// at less than the source's real framerate (a 60fps source at 0.5x becomes
+// an effective 30fps), which reads as choppy on fast-moving backgrounds
+// even though the file itself is perfectly valid. `minterpolate` fills in
+// real synthesized frames to compensate. `mi_mode=blend` (a cheap crossfade)
+// rather than motion-compensated interpolation, since this has to run on
+// ffmpeg.wasm with no hardware acceleration — including on mobile CPUs.
+// Placed after the scale filter so it interpolates the smaller, already-
+// downscaled frames rather than full-resolution ones.
+function interpolateFilter(factor: number): string {
+  return factor < 1 ? ",minterpolate=fps=60:mi_mode=blend" : "";
 }
 
 export interface BoomerangOptions {
@@ -90,171 +45,276 @@ export interface BoomerangOptions {
   onProgress?: (fraction: number) => void;
 }
 
-interface DecodedFrame {
-  /** Seconds since the start of the trimmed segment (0..duration). */
-  t: number;
-  bitmap: ImageBitmap;
-}
+type StepKind = "encode" | "copy";
 
-/** Binary-search `frames` (sorted by `t`) for the pair bracketing `t`, plus the blend weight toward the later one. */
-function bracket(frames: DecodedFrame[], t: number): { a: DecodedFrame; b: DecodedFrame | null; alpha: number } {
-  if (frames.length === 1 || t <= frames[0].t) return { a: frames[0], b: null, alpha: 0 };
-  const last = frames[frames.length - 1];
-  if (t >= last.t) return { a: last, b: null, alpha: 0 };
-
-  let lo = 0;
-  let hi = frames.length - 1;
-  while (hi - lo > 1) {
-    const mid = (lo + hi) >> 1;
-    if (frames[mid].t <= t) lo = mid;
-    else hi = mid;
-  }
-  const a = frames[lo];
-  const b = frames[hi];
-  const span = b.t - a.t;
-  return { a, b, alpha: span > 0 ? (t - a.t) / span : 0 };
+// "encode" steps (re-encoding video) take far longer than "copy" steps
+// (container-only concat/loop), so weight progress accordingly.
+function progressWeights(kinds: StepKind[]): number[] {
+  const raw = kinds.map((k) => (k === "encode" ? 1 : 0.15));
+  const sum = raw.reduce((a, b) => a + b, 0);
+  return raw.map((w) => w / sum);
 }
 
 export async function createBoomerang(
+  ffmpeg: FFmpeg,
   inputFile: File,
   { start, duration, loops, resolution, speed, mode, onProgress }: BoomerangOptions,
 ): Promise<Blob> {
-  const input = new Input({ formats: ALL_FORMATS, source: new BlobSource(inputFile) });
-  const frames: DecodedFrame[] = [];
+  const inputName = "input" + extOf(inputFile.name);
+  await ffmpeg.writeFile(inputName, await fetchFile(inputFile));
+
+  const chunkSeconds = REVERSE_CHUNK_SECONDS[resolution];
+  const finalSegmentDuration = forwardDuration(mode, speed, duration);
+  const reverseChunkCount = chunkSeconds
+    ? Math.max(1, Math.ceil(finalSegmentDuration / chunkSeconds))
+    : 1;
+  const reverseSteps: StepKind[] =
+    reverseChunkCount > 1 ? [...Array(reverseChunkCount).fill("encode" as StepKind), "copy"] : ["encode"];
+
+  // "freeze" appends two tiny hold clips after the reverse pass; "pulse"
+  // appends its extra pull-back/push-forward legs there too — both add two
+  // more encode passes to the pipeline before the ping-pong concat.
+  const extraLegSteps: StepKind[] = mode === "freeze" || mode === "pulse" ? ["encode", "encode"] : [];
+
+  const stepKinds: StepKind[] =
+    mode === "ease"
+      ? ["encode", "encode", "encode", "copy", ...reverseSteps, ...extraLegSteps, "copy", "copy"]
+      : ["encode", ...reverseSteps, ...extraLegSteps, "copy", "copy"];
+  const weights = progressWeights(stepKinds);
+
+  let stepIndex = 0;
+  let stepBase = 0;
+  const handleProgress = ({ progress }: { progress: number }) => {
+    const clamped = Math.min(Math.max(progress, 0), 1);
+    onProgress?.(Math.min(stepBase + clamped * weights[stepIndex], 0.99));
+  };
+  ffmpeg.on("progress", handleProgress);
+  const advance = () => {
+    stepBase += weights[stepIndex];
+    stepIndex++;
+  };
+
+  const cleanupFiles = [inputName, "segment.mp4", "reversed.mp4", "concat.txt", "pingpong.mp4", "output.mp4"];
+  // Deleted eagerly as soon as each is consumed, instead of only at the end —
+  // mobile browsers have much tighter WASM memory limits than desktop, and
+  // keeping every intermediate file resident in MEMFS at once was pushing
+  // exports over the limit and crashing the tab partway through.
+  const del = (name: string) => ffmpeg.deleteFile(name).catch(() => {});
 
   try {
-    const track = await input.getPrimaryVideoTrack();
-    if (!track || !(await track.canDecode())) {
-      throw new Error("No se pudo leer el video (formato no soportado).");
-    }
+    const scaleFilter = resolution === "original" ? "" : `,scale=-2:${resolution}`;
 
-    const srcWidth = await track.getDisplayWidth();
-    const srcHeight = await track.getDisplayHeight();
-    const { width: outWidth, height: outHeight } = targetDimensions(resolution, srcWidth, srcHeight);
-    const zoomWidth = Math.round(outWidth * ZOOM_FACTOR);
-    const zoomHeight = Math.round(outHeight * ZOOM_FACTOR);
-    const zoomOffsetX = (zoomWidth - outWidth) / 2;
-    const zoomOffsetY = (zoomHeight - outHeight) / 2;
-
-    // Decode every source frame in the trimmed range exactly once, drawing
-    // each straight into an offscreen canvas at the final output size and
-    // keeping only the resulting bitmap. This is what lets "reverse" and
-    // "loop" be free afterwards — random access into an array instead of a
-    // second decode pass or a real `reverse` filter — and it's also why
-    // memory stays bounded: we never hold more than one full-resolution
-    // frame at a time, only the (much cheaper) already-scaled bitmaps.
-    // `prefer-software` steers WebCodecs away from the platform's hardware
-    // codec block (Apple's VideoToolbox on iOS/macOS) and onto a real
-    // software codec implementation instead. Hardware blocks are built for
-    // fast, "good enough" throughput (camera apps, video calls), not for
-    // honoring an exact requested bitrate — that mismatch is almost
-    // certainly why 2K came out blurry even with a generous bitrate above.
-    // Software decode/encode is slower, but here that's the right trade:
-    // a boomerang export finishing in a few extra seconds beats one that
-    // finishes fast but looks bad, or one whose hardware path is hitting
-    // whatever internal limit is crashing 4K outright.
-    const codecPreference = { hardwareAcceleration: "prefer-software" as const };
-    const sink = new VideoSampleSink(track, codecPreference);
-    const scratch = new OffscreenCanvas(outWidth, outHeight);
-    const scratchCtx = scratch.getContext("2d")!;
-    for await (const sample of sink.samples(start, start + duration)) {
-      scratchCtx.clearRect(0, 0, outWidth, outHeight);
-      sample.drawWithFit(scratchCtx, { fit: "cover" });
-      frames.push({ t: sample.timestamp - start, bitmap: await createImageBitmap(scratch) });
-      sample.close();
-    }
-    if (frames.length === 0) {
-      throw new Error("El tramo elegido no tiene frames de video.");
-    }
-
-    // Safari's WebCodecs H.264 encoder has a known, documented bug where it
-    // silently ignores the requested bitrate (w3c/webcodecs#430) — no matter
-    // how generous a number we compute, it can still encode low-quality.
-    // HEVC is ~40% more bit-efficient than AVC to begin with, and is the
-    // codec Apple's own hardware is built around, so it's worth trying as
-    // the primary target — with AVC as a fallback for browsers (notably
-    // Android Chrome) that don't ship an HEVC *encoder* at all.
-    const quality = new Quality({ bitrate: targetBitrate(outWidth, outHeight), quantizer: QUANTIZER });
-    const codec = (await canEncodeVideo("hevc", { width: outWidth, height: outHeight, quality })) ? "hevc" : "avc";
-
-    const output = new Output({ format: new Mp4OutputFormat(), target: new BufferTarget() });
-    const videoSource = new VideoSampleSource({ codec, quality, ...codecPreference });
-    output.addVideoTrack(videoSource);
-    await output.start();
-
-    const canvas = new OffscreenCanvas(outWidth, outHeight);
-    const ctx = canvas.getContext("2d")!;
-    const legs = legsFor(mode);
-    const zoomIndex = zoomLegIndex(mode);
-    const expectedTotal = totalBoomerangDuration(mode, speed, duration, loops) || 1;
-    let outputTime = 0;
-
-    const emit = async (fraction: number, isZoom: boolean, blend: boolean) => {
-      const { a, b, alpha } = bracket(frames, fraction * duration);
-      const useBlend = blend && b !== null;
-      ctx.clearRect(0, 0, outWidth, outHeight);
-      if (isZoom) {
-        ctx.drawImage(a.bitmap, -zoomOffsetX, -zoomOffsetY, zoomWidth, zoomHeight);
-        if (useBlend) {
-          ctx.globalAlpha = alpha;
-          ctx.drawImage(b!.bitmap, -zoomOffsetX, -zoomOffsetY, zoomWidth, zoomHeight);
-          ctx.globalAlpha = 1;
-        }
-      } else {
-        ctx.drawImage(a.bitmap, 0, 0);
-        if (useBlend) {
-          ctx.globalAlpha = alpha;
-          ctx.drawImage(b!.bitmap, 0, 0);
-          ctx.globalAlpha = 1;
-        }
+    if (mode === "ease") {
+      const zoneFiles: string[] = [];
+      for (let i = 0; i < EASE_ZONES.length; i++) {
+        const zone = EASE_ZONES[i];
+        const zoneStart = start + zone.from * duration;
+        const zoneDuration = (zone.to - zone.from) * duration;
+        const factor = speed * zone.factor;
+        const name = `zone${i}.mp4`;
+        await ffmpeg.exec([
+          "-ss", zoneStart.toFixed(3),
+          "-t", zoneDuration.toFixed(3),
+          "-i", inputName,
+          "-vf", `setpts=(PTS-STARTPTS)/${factor}${scaleFilter}${interpolateFilter(factor)}`,
+          "-an",
+          ...ENCODE_ARGS,
+          name,
+        ]);
+        advance();
+        zoneFiles.push(name);
+        cleanupFiles.push(name);
       }
+      cleanupFiles.push("zones.txt");
+      await ffmpeg.writeFile("zones.txt", zoneFiles.map((f) => `file '${f}'`).join("\n") + "\n");
+      await ffmpeg.exec(["-f", "concat", "-safe", "0", "-i", "zones.txt", "-c", "copy", "segment.mp4"]);
+      advance();
+      await del("zones.txt");
+      for (const f of zoneFiles) await del(f);
+    } else {
+      // Trim to the chosen segment (+ speed + optional downscale), strip
+      // audio, re-encode so cut points land on real frames instead of the
+      // nearest keyframe. "freeze"/"pulse"/"zoom" all share this exact same
+      // forward pass — they only differ in what happens after.
+      await ffmpeg.exec([
+        "-ss", start.toFixed(3),
+        "-t", duration.toFixed(3),
+        "-i", inputName,
+        "-vf", `setpts=PTS/${speed}${scaleFilter}${interpolateFilter(speed)}`,
+        "-an",
+        ...ENCODE_ARGS,
+        "segment.mp4",
+      ]);
+      advance();
+    }
+    await del(inputName);
 
-      const sample = new VideoSample(canvas, { timestamp: outputTime, duration: FRAME_DURATION });
-      await videoSource.add(sample);
-      sample.close();
-      outputTime += FRAME_DURATION;
-      onProgress?.(Math.min(outputTime / expectedTotal, 0.99));
-    };
-
-    for (let loop = 0; loop < Math.max(loops, 1); loop++) {
-      for (let legIndex = 0; legIndex < legs.length; legIndex++) {
-        const leg = legs[legIndex];
-        const dir = leg.to >= leg.from ? 1 : -1;
-        const isZoomLeg = zoomIndex === legIndex;
-
-        for (let held = 0; held < leg.holdBefore; held += FRAME_DURATION) {
-          await emit(leg.from, isZoomLeg, false);
-        }
-
-        for (
-          let fraction = leg.from;
-          dir > 0 ? fraction < leg.to : fraction > leg.to;
-
-        ) {
-          const rate = (leg.eased ? zoneFactorAt(mode, fraction) : 1) * speed;
-          await emit(fraction, isZoomLeg, rate < 1);
-          // `rate` is a speed multiplier (fraction-per-real-second, roughly
-          // matching how useBoomerangPreview paces a <video> element's
-          // currentTime), not a fraction-per-output-frame step — it has to
-          // be scaled down by the segment's own duration to get how much of
-          // the 0..1 leg span one output frame actually covers, otherwise
-          // every leg finishes in a duration-independent, speed-only amount
-          // of time (confirmed by testing: without the `/ duration`, a
-          // classic 0.5x/2s-segment boomerang came out 4s instead of 8s).
-          fraction += (FRAME_DURATION * rate * dir) / duration;
-        }
+    // Build the reversed copy of that same (already speed-adjusted) segment.
+    // Codec settings must be explicit here too — without them ffmpeg falls
+    // back to a much slower default preset for this pass.
+    //
+    // The `reverse` filter has to hold every decoded frame in memory before
+    // it can write them out backwards. At native/2K resolution that's
+    // enough raw frame data to blow past iOS Safari's per-tab memory
+    // ceiling — the OS kills the tab outright when that happens, so there's
+    // no error to catch, it just reloads. Splitting the segment into small
+    // chunks, reversing each chunk on its own, then splicing the chunks
+    // back together in *reverse chunk order* produces the exact same frame
+    // order as reversing the whole thing at once (same idea as reversing a
+    // deck of cards a few at a time), but peak memory only ever has to hold
+    // one chunk instead of the whole segment.
+    //
+    // "zoom" mode rides along on this same reverse pass — its punch-in is
+    // just an extra filter tacked onto the same `-vf reverse`, applied to
+    // every chunk when chunked so the whole reverse pass stays zoomed.
+    const reverseVf = mode === "zoom" ? `reverse,${ZOOM_FILTER}` : "reverse";
+    if (reverseChunkCount > 1) {
+      const chunkFiles: string[] = [];
+      for (let i = 0; i < reverseChunkCount; i++) {
+        const chunkStart = i * chunkSeconds!;
+        const chunkLength = Math.min(chunkSeconds!, finalSegmentDuration - chunkStart);
+        const name = `rchunk${i}.mp4`;
+        await ffmpeg.exec([
+          "-ss", chunkStart.toFixed(3),
+          "-t", chunkLength.toFixed(3),
+          "-i", "segment.mp4",
+          "-vf", reverseVf,
+          "-an",
+          ...ENCODE_ARGS,
+          name,
+        ]);
+        advance();
+        chunkFiles.push(name);
+        cleanupFiles.push(name);
       }
+      cleanupFiles.push("reverse-chunks.txt");
+      await ffmpeg.writeFile(
+        "reverse-chunks.txt",
+        [...chunkFiles].reverse().map((f) => `file '${f}'`).join("\n") + "\n",
+      );
+      await ffmpeg.exec(["-f", "concat", "-safe", "0", "-i", "reverse-chunks.txt", "-c", "copy", "reversed.mp4"]);
+      advance();
+      await del("reverse-chunks.txt");
+      for (const f of chunkFiles) await del(f);
+    } else {
+      await ffmpeg.exec([
+        "-i", "segment.mp4",
+        "-vf", reverseVf,
+        "-an",
+        ...ENCODE_ARGS,
+        "reversed.mp4",
+      ]);
+      advance();
     }
 
-    await output.finalize();
+    // "freeze": two tiny extra clips, each grabbing a sliver of segment.mp4
+    // and padding it out with `tpad` (repeats the last decoded frame) —
+    // one holds on the peak frame before the reverse pass starts, one
+    // holds on the start frame before the next loop's forward pass starts.
+    // Built as their own small clips (rather than baking the hold into
+    // segment.mp4/reversed.mp4 directly) so they don't disturb the reverse
+    // chunk-duration math above.
+    if (mode === "freeze") {
+      const grab = 0.05;
+      const holdVf = `tpad=stop_mode=clone:stop_duration=${FREEZE_HOLD_SECONDS.toFixed(3)}`;
+      await ffmpeg.exec([
+        "-ss", Math.max(0, finalSegmentDuration - grab).toFixed(3),
+        "-t", grab.toFixed(3),
+        "-i", "segment.mp4",
+        "-vf", holdVf,
+        "-an",
+        ...ENCODE_ARGS,
+        "hold-end.mp4",
+      ]);
+      advance();
+      cleanupFiles.push("hold-end.mp4");
+
+      await ffmpeg.exec([
+        "-ss", "0",
+        "-t", grab.toFixed(3),
+        "-i", "segment.mp4",
+        "-vf", holdVf,
+        "-an",
+        ...ENCODE_ARGS,
+        "hold-start.mp4",
+      ]);
+      advance();
+      cleanupFiles.push("hold-start.mp4");
+    }
+
+    // "pulse": a quick stutter — after the full forward pass (segment.mp4)
+    // and before the full reverse (reversed.mp4), pull back part-way and
+    // push forward again. Both legs are cut from segment.mp4 itself (already
+    // speed-adjusted and scaled), just a sub-range re-encoded forward
+    // (legc) or reversed (legb).
+    if (mode === "pulse") {
+      const legStart = PULSE_PULLBACK * finalSegmentDuration;
+      const legSpan = finalSegmentDuration - legStart;
+      await ffmpeg.exec([
+        "-ss", legStart.toFixed(3),
+        "-t", legSpan.toFixed(3),
+        "-i", "segment.mp4",
+        "-vf", "reverse",
+        "-an",
+        ...ENCODE_ARGS,
+        "legb.mp4",
+      ]);
+      advance();
+      cleanupFiles.push("legb.mp4");
+
+      await ffmpeg.exec([
+        "-ss", legStart.toFixed(3),
+        "-t", legSpan.toFixed(3),
+        "-i", "segment.mp4",
+        "-an",
+        ...ENCODE_ARGS,
+        "legc.mp4",
+      ]);
+      advance();
+      cleanupFiles.push("legc.mp4");
+    }
+
+    // Glue every leg into a single ping-pong cycle. Classic/ease/zoom are
+    // just forward+reverse; freeze and pulse splice their extra legs in
+    // between.
+    const pingpongFiles =
+      mode === "freeze"
+        ? ["segment.mp4", "hold-end.mp4", "reversed.mp4", "hold-start.mp4"]
+        : mode === "pulse"
+          ? ["segment.mp4", "legb.mp4", "legc.mp4", "reversed.mp4"]
+          : ["segment.mp4", "reversed.mp4"];
+    await ffmpeg.writeFile("concat.txt", pingpongFiles.map((f) => `file '${f}'`).join("\n") + "\n");
+    await ffmpeg.exec(["-f", "concat", "-safe", "0", "-i", "concat.txt", "-c", "copy", "pingpong.mp4"]);
+    advance();
+    for (const f of pingpongFiles) await del(f);
+    await del("concat.txt");
+
+    // Repeat the cycle without re-encoding. Built via the concat demuxer
+    // (rather than -stream_loop) because ffmpeg.wasm doesn't reliably loop
+    // an input stream — it silently plays it back only once.
+    cleanupFiles.push("loops.txt");
+    await ffmpeg.writeFile(
+      "loops.txt",
+      Array.from({ length: Math.max(loops, 1) }, () => "file 'pingpong.mp4'").join("\n") + "\n",
+    );
+    await ffmpeg.exec(["-f", "concat", "-safe", "0", "-i", "loops.txt", "-c", "copy", "output.mp4"]);
+    advance();
+    await del("pingpong.mp4");
+    await del("loops.txt");
+
     onProgress?.(1);
 
-    const buffer = output.target.buffer;
-    if (!buffer) throw new Error("La exportación no produjo ningún archivo.");
-    return new Blob([buffer], { type: "video/mp4" });
+    // Pass the read bytes straight into the Blob — wrapping them in
+    // `new Uint8Array(data)` would copy the entire output file a second
+    // time, which is exactly the kind of extra peak memory that was
+    // crashing the tab on iPhone right as the export finished.
+    const data = await ffmpeg.readFile("output.mp4");
+    return new Blob([data as BlobPart], { type: "video/mp4" });
   } finally {
-    for (const f of frames) f.bitmap.close();
-    input.dispose();
+    ffmpeg.off("progress", handleProgress);
+    for (const f of cleanupFiles) {
+      await ffmpeg.deleteFile(f).catch(() => {});
+    }
   }
 }
 

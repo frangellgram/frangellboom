@@ -28,12 +28,6 @@ const SPEED_OPTIONS: { value: Speed; label: string }[] = [
   { value: 1, label: "1×" },
 ];
 
-// "original" only ever worked reliably through the FFmpeg export engine
-// (its reverse pass is chunked in small pieces specifically to survive
-// iOS Safari's per-tab memory ceiling — see boomerangFfmpeg.ts). The MP4/
-// WebCodecs engine buffers every decoded frame of the trimmed segment at
-// once with no chunking equivalent yet, so picking "original" there can
-// still crash the page on a 4K+ source.
 const RESOLUTION_OPTIONS: { value: Resolution; label: string }[] = [
   { value: "original", label: "Original" },
   { value: "1440", label: "2K" },
