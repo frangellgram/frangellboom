@@ -2,6 +2,8 @@
 
 Crea boomerangs desde tus propios videos, en la calidad que quieras — sin el límite de 720p de Instagram.
 
+**🔗 [Probarlo en vivo](https://frangellgram.github.io/frangellboom/)**
+
 ## Cómo funciona
 
 1. Importá un video (grabado con la cámara de tu dispositivo).
